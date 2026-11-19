@@ -28,7 +28,7 @@ export async function parseJsonBody(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1_000_000) throw new HttpError(413, 'Request is too large.');
+    if (size > 8_000_000) throw new HttpError(413, 'Request is too large. Images must be 5 MB or smaller.');
     chunks.push(chunk);
   }
   try {

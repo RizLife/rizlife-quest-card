@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { admin, config, createAuthClient } from './config.mjs';
 import { createAuthorizer } from './auth.mjs';
@@ -8,6 +9,19 @@ import { httpUrl, requiredText as assertText } from './validation.mjs';
 const root = config.publicDirectory;
 const requireUser = createAuthorizer({ admin, createAuthClient });
 const loginAttempts = new Map();
+const evidenceBucket = 'submission-evidence';
+const imageTypes = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+]);
+
+function matchesImageSignature(buffer, mimeType) {
+  if (mimeType === 'image/jpeg') return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (mimeType === 'image/png') return buffer.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
+  if (mimeType === 'image/webp') return buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP';
+  return false;
+}
 
 function sessionCookies(session) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
@@ -43,18 +57,32 @@ function limitAuthentication(request) {
   if (attempts.length > limit) throw new HttpError(429, 'Too many sign-in attempts. Please try again later.');
 }
 
+async function addEvidenceUrls(rows) {
+  const imageRows = rows.filter((row) => row.evidence_type === 'image' && row.evidence && !/^https?:\/\//i.test(row.evidence));
+  if (!imageRows.length) return rows;
+  const paths = [...new Set(imageRows.map((row) => row.evidence))];
+  const { data, error } = await admin.storage.from(evidenceBucket).createSignedUrls(paths, 3600);
+  if (error) throw error;
+  const urls = new Map(paths.map((path, index) => [path, data[index]?.signedUrl || null]));
+  return rows.map((row) => ({
+    ...row,
+    evidence_url: row.evidence_type === 'image' ? (/^https?:\/\//i.test(row.evidence) ? row.evidence : urls.get(row.evidence) || null) : null,
+  }));
+}
+
 async function latestSubmissions(studentId=null) {
   let query = admin.from('submissions').select('*').order('id', { ascending:false });
   if (studentId) query = query.eq('student_id', studentId);
   const { data, error } = await query;
   if (error) throw error;
   const seen = new Set();
-  return data.filter(row => {
+  const latest = data.filter(row => {
     const key = `${row.student_id}:${row.quest_id}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  return addEvidenceUrls(latest);
 }
 
 async function studentCard(studentId) {
@@ -94,7 +122,7 @@ async function dashboardData(teacherId, sectionId) {
   if (profileError || questError || submissionError) throw profileError || questError || submissionError;
 
   const questIds = new Set(quests.map(q=>Number(q.id)));
-  const sectionSubmissions = allSubmissions.filter(row=>questIds.has(Number(row.quest_id)) && studentIds.includes(row.student_id));
+  const sectionSubmissions = await addEvidenceUrls(allSubmissions.filter(row=>questIds.has(Number(row.quest_id)) && studentIds.includes(row.student_id)));
   const latest = [];
   const seen = new Set();
   for (const row of sectionSubmissions) {
@@ -188,11 +216,35 @@ async function handleApi(req, res, url) {
     if (current && current.status !== 'rejected') throw new HttpError(409, 'This task already has an active submission.');
     const body = await parseBody(req);
     const evidenceType = String(body.type || '');
-    const evidence = assertText(body.evidence, 'Evidence');
     if (!['link','text','image'].includes(evidenceType)) throw new HttpError(400, 'Choose a valid evidence type.');
-    if (evidenceType !== 'text') httpUrl(evidence);
+    let evidence;
+    let uploadedPath = null;
+    if (evidenceType === 'image') {
+      const image = body.image || {};
+      const mimeType = String(image.type || '').toLowerCase();
+      const extension = imageTypes.get(mimeType);
+      if (!extension) throw new HttpError(400, 'Upload a JPG, PNG, or WebP image.');
+      const encoded = String(image.data || '').replace(/^data:[^;]+;base64,/, '');
+      let buffer;
+      try { buffer = Buffer.from(encoded, 'base64'); } catch { throw new HttpError(400, 'The image could not be read.'); }
+      if (!buffer.length || buffer.length > 5 * 1024 * 1024) throw new HttpError(400, 'The image must be 5 MB or smaller.');
+      if (!matchesImageSignature(buffer, mimeType)) throw new HttpError(400, 'The uploaded file does not match its image type.');
+      uploadedPath = `${user.id}/${questId}/${randomUUID()}.${extension}`;
+      const { error:uploadError } = await admin.storage.from(evidenceBucket).upload(uploadedPath, buffer, {
+        contentType:mimeType,
+        upsert:false,
+      });
+      if (uploadError) throw new HttpError(500, 'The image upload failed. Please try again.');
+      evidence = uploadedPath;
+    } else {
+      evidence = assertText(body.evidence, 'Evidence');
+      if (evidenceType === 'link') httpUrl(evidence);
+    }
     const { error } = await admin.from('submissions').insert({ student_id:user.id, quest_id:questId, evidence_type:evidenceType, evidence });
-    if (error) throw error;
+    if (error) {
+      if (uploadedPath) await admin.storage.from(evidenceBucket).remove([uploadedPath]);
+      throw error;
+    }
     return send(res, 201, { ok:true });
   }
 

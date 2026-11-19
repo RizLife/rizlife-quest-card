@@ -1,6 +1,6 @@
-# RizLife Quest Card
+# Rizal Life
 
-RizLife is a role-based course workspace for managing learning tasks, student evidence, teacher reviews, and verified progress. It uses Supabase Auth and PostgreSQL, with a small Node.js server that keeps administrative credentials out of the browser.
+Rizal Life is a role-based course workspace for managing learning tasks, student evidence, teacher reviews, and verified progress. It uses Supabase Auth, PostgreSQL, and private Supabase Storage, with a small Node.js server that keeps administrative credentials out of the browser.
 
 ## Requirements
 
@@ -18,6 +18,8 @@ This creates profiles, classes, enrollments, tasks, submissions, indexes, and Ro
 If the project was set up before class support was added, run `supabase/sections-migration.sql` once in the SQL Editor instead of rerunning the complete schema. The database keeps the internal table name `sections`, while the application consistently uses “Class” for users.
 
 For an existing project, also run `supabase/security-hardening.sql` after the class migration. It removes overly broad Row Level Security policies and prevents teachers from reading or changing records outside their own classes.
+
+Run `supabase/storage-migration.sql` once to create the private image-evidence bucket. The server issues short-lived signed URLs; the bucket is never public.
 
 ## 2. Configure local environment variables
 
@@ -72,7 +74,7 @@ Open `http://127.0.0.1:8765`.
 - Teachers can manage quests and review submissions.
 - Every exposed table has Row Level Security enabled.
 - The Supabase secret key stays on the server and is excluded by `.gitignore`.
-- Large media remains on external learning platforms; RizLife stores lightweight links or text evidence.
+- Student proof images are stored in a private Supabase Storage bucket with a 5 MB limit and short-lived signed URLs.
 
 ## Project structure
 
