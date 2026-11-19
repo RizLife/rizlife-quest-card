@@ -21,13 +21,7 @@ For an existing project, also run `supabase/security-hardening.sql` after the cl
 
 ## 2. Configure local environment variables
 
-Copy `.env.example` to `.env`:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-In the Supabase dashboard, open **Project Settings > Data API** and copy the project URL and publishable key. Then open **Project Settings > API Keys** and create or copy a server secret key.
+Create a local `.env` file. In the Supabase dashboard, open **Project Settings > Data API** and copy the project URL and publishable key. Then open **Project Settings > API Keys** and create or copy a server secret key.
 
 Fill in `.env`:
 
@@ -88,7 +82,7 @@ src/server/           HTTP server, routes, auth, and utilities
 scripts/              Local administration utilities
 supabase/             Database schema and migrations
 serve.mjs             Small application entry point
-.env.example          Safe environment-variable template
+.env                  Local-only environment configuration (ignored by Git)
 ```
 
 ## Useful commands
