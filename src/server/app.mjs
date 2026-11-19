@@ -1,4 +1,3 @@
-import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { admin, config, createAuthClient } from './config.mjs';
@@ -361,7 +360,7 @@ async function handleApi(req, res, url) {
 }
 
 const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8' };
-createServer(async (req,res) => {
+export async function handleRequest(req,res) {
   try {
     setSecurityHeaders(res);
     const url = new URL(req.url, 'http://localhost');
@@ -381,4 +380,4 @@ createServer(async (req,res) => {
     res.writeHead(error.status || 404);
     res.end(error.message || 'Not found');
   }
-}).listen(config.port, () => console.log(`RizLife running on port ${config.port}`));
+}

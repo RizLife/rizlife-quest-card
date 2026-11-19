@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node serve.mjs",
-    "check": "node --check serve.mjs && node --check server.mjs && node --check src/server/app.mjs && node --check public/app.js",
+    "check": "node --check serve.mjs && node --check api/[...path].mjs && node --check src/server/app.mjs && node --check public/app.js",
     "create-user": "node scripts/create-user.mjs"
   },
   "dependencies": {
