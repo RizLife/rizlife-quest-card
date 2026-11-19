@@ -108,18 +108,38 @@ async function requireOwnedSection(teacherId, sectionId) {
   return data;
 }
 
+async function inviteStudentAccount(email, name, sectionIds) {
+  const { data:created,error:createError } = await admin.auth.admin.inviteUserByEmail(email,{
+    data:{name,role:'student'},
+    redirectTo:`${config.appUrl}/accept-invite`
+  });
+  if (createError) throw new HttpError(400,createError.message);
+  try {
+    const { error:profileError } = await admin.from('profiles').insert({id:created.user.id,name,role:'student'});
+    if (profileError) throw profileError;
+    const enrollments = [...new Set(sectionIds.map(Number))].map(sectionId=>({section_id:sectionId,student_id:created.user.id}));
+    const { error:enrollmentError } = await admin.from('section_students').insert(enrollments);
+    if (enrollmentError) throw enrollmentError;
+  } catch(error) {
+    await admin.auth.admin.deleteUser(created.user.id);
+    throw error;
+  }
+  return created.user;
+}
+
 async function dashboardData(teacherId, sectionId) {
   const section = await requireOwnedSection(teacherId, sectionId);
   const { data:enrollments, error:enrollmentError } = await admin.from('section_students').select('student_id').eq('section_id',section.id);
   if (enrollmentError) throw enrollmentError;
   const studentIds = enrollments.map(row=>row.student_id);
   const profileQuery = studentIds.length ? admin.from('profiles').select('id,name,active').in('id',studentIds).eq('active',true).order('name') : Promise.resolve({data:[],error:null});
-  const [{ data:profiles, error:profileError }, { data:quests, error:questError }, { data:allSubmissions, error:submissionError }] = await Promise.all([
+  const [{ data:profiles, error:profileError }, { data:quests, error:questError }, { data:allSubmissions, error:submissionError }, authResult] = await Promise.all([
     profileQuery,
     admin.from('quests').select('id,title').eq('section_id',section.id).eq('active',true).order('id'),
-    admin.from('submissions').select('*').order('id',{ascending:false})
+    admin.from('submissions').select('*').order('id',{ascending:false}),
+    studentIds.length ? admin.auth.admin.listUsers({page:1,perPage:1000}) : Promise.resolve({data:{users:[]},error:null})
   ]);
-  if (profileError || questError || submissionError) throw profileError || questError || submissionError;
+  if (profileError || questError || submissionError || authResult.error) throw profileError || questError || submissionError || authResult.error;
 
   const questIds = new Set(quests.map(q=>Number(q.id)));
   const sectionSubmissions = await addEvidenceUrls(allSubmissions.filter(row=>questIds.has(Number(row.quest_id)) && studentIds.includes(row.student_id)));
@@ -131,12 +151,15 @@ async function dashboardData(teacherId, sectionId) {
   }
   const profileMap = new Map(profiles.map(profile => [profile.id, profile]));
   const questMap = new Map(quests.map(quest => [Number(quest.id), quest]));
+  const authMap = new Map(authResult.data.users.map(user=>[user.id,user]));
   const students = profiles.map(profile => {
     const rows = latest.filter(row => row.student_id === profile.id);
+    const authUser = authMap.get(profile.id);
     return {
       id:profile.id,
       name:profile.name,
-      email:'',
+      email:authUser?.email || '',
+      invitationPending:Boolean(authUser && !authUser.email_confirmed_at),
       verified:rows.filter(row=>row.status==='verified').length,
       submitted:rows.filter(row=>row.status==='submitted').length,
       rejected:rows.filter(row=>row.status==='rejected').length
@@ -325,26 +348,44 @@ async function handleApi(req, res, url) {
     if (existing) {
       const { data:profile } = await admin.from('profiles').select('id,name,role,active').eq('id',existing.id).maybeSingle();
       if (!profile || profile.role !== 'student' || !profile.active) throw new HttpError(409,'This email already belongs to another account.');
+      if (!existing.email_confirmed_at) {
+        const { data:enrollments,error:enrollmentReadError } = await admin.from('section_students').select('section_id').eq('student_id',existing.id);
+        if (enrollmentReadError) throw enrollmentReadError;
+        const sectionIds = [...enrollments.map(row=>row.section_id),section.id];
+        const { error:deleteError } = await admin.auth.admin.deleteUser(existing.id);
+        if (deleteError) throw deleteError;
+        const invited = await inviteStudentAccount(email,profile.name,sectionIds);
+        return send(res,201,{id:invited.id,name:profile.name,email,invitationSent:true,existing:true});
+      }
       const { error:enrollmentError } = await admin.from('section_students').insert({section_id:section.id,student_id:existing.id});
       if (enrollmentError?.code==='23505') throw new HttpError(409,'This student is already enrolled in the class.');
       if (enrollmentError) throw enrollmentError;
       return send(res,201,{id:existing.id,name:profile.name,email,invitationSent:false,existing:true});
     }
-    const { data:created,error:createError } = await admin.auth.admin.inviteUserByEmail(email,{
-      data:{name,role:'student'},
-      redirectTo:`${config.appUrl}/accept-invite`
-    });
-    if (createError) throw new HttpError(400,createError.message);
-    try {
-      const { error:profileError } = await admin.from('profiles').insert({id:created.user.id,name,role:'student'});
-      if (profileError) throw profileError;
-      const { error:enrollmentError } = await admin.from('section_students').insert({section_id:section.id,student_id:created.user.id});
-      if (enrollmentError) throw enrollmentError;
-    } catch(error) {
-      await admin.auth.admin.deleteUser(created.user.id);
-      throw error;
-    }
-    return send(res,201,{id:created.user.id,name,email,invitationSent:true,existing:false});
+    const invited = await inviteStudentAccount(email,name,[section.id]);
+    return send(res,201,{id:invited.id,name,email,invitationSent:true,existing:false});
+  }
+
+  const invitationMatch = path.match(/^\/api\/teacher\/sections\/(\d+)\/students\/([0-9a-f-]+)\/invitation$/i);
+  if (req.method === 'POST' && invitationMatch) {
+    const teacher = await requireUser(req,'teacher');
+    const section = await requireOwnedSection(teacher.id,invitationMatch[1]);
+    const studentId = invitationMatch[2];
+    const [{ data:membership }, { data:profile }, authResult, enrollmentResult] = await Promise.all([
+      admin.from('section_students').select('student_id').eq('section_id',section.id).eq('student_id',studentId).maybeSingle(),
+      admin.from('profiles').select('id,name,role,active').eq('id',studentId).maybeSingle(),
+      admin.auth.admin.getUserById(studentId),
+      admin.from('section_students').select('section_id').eq('student_id',studentId)
+    ]);
+    if (!membership || !profile || profile.role!=='student') throw new HttpError(404,'Student invitation not found.');
+    if (authResult.error || !authResult.data.user) throw new HttpError(404,'Student account not found.');
+    if (authResult.data.user.email_confirmed_at) throw new HttpError(409,'This student has already accepted the invitation.');
+    if (enrollmentResult.error) throw enrollmentResult.error;
+    const email = authResult.data.user.email;
+    const { error:deleteError } = await admin.auth.admin.deleteUser(studentId);
+    if (deleteError) throw deleteError;
+    const invited = await inviteStudentAccount(email,profile.name,enrollmentResult.data.map(row=>row.section_id));
+    return send(res,200,{id:invited.id,invitationSent:true});
   }
 
   const enrollmentMatch = path.match(/^\/api\/teacher\/sections\/(\d+)\/students\/([0-9a-f-]+)$/i);
