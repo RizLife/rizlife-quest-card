@@ -381,4 +381,4 @@ createServer(async (req,res) => {
     res.writeHead(error.status || 404);
     res.end(error.message || 'Not found');
   }
-}).listen(config.port, '127.0.0.1', () => console.log(`RizLife running at http://127.0.0.1:${config.port}`));
+}).listen(config.port, () => console.log(`RizLife running on port ${config.port}`));
