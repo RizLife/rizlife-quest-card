@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node serve.mjs",
-    "check": "node --check serve.mjs && node --check dist/app.js",
+    "check": "node --check serve.mjs && node --check src/server/app.mjs && node --check public/app.js",
     "create-user": "node scripts/create-user.mjs"
   },
   "dependencies": {

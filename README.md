@@ -1,6 +1,6 @@
 # RizLife Quest Card
 
-RizLife is a role-based course workspace for managing learning quests, student evidence, teacher reviews, and verified progress. It uses Supabase Auth and PostgreSQL, with a small Node.js server that keeps administrative credentials out of the browser.
+RizLife is a role-based course workspace for managing learning tasks, student evidence, teacher reviews, and verified progress. It uses Supabase Auth and PostgreSQL, with a small Node.js server that keeps administrative credentials out of the browser.
 
 ## Requirements
 
@@ -16,6 +16,8 @@ RizLife is a role-based course workspace for managing learning quests, student e
 This creates profiles, classes, enrollments, tasks, submissions, indexes, and Row Level Security policies. After signing in, the teacher creates classes, adds students to each class, and creates tasks for the selected class.
 
 If the project was set up before class support was added, run `supabase/sections-migration.sql` once in the SQL Editor instead of rerunning the complete schema. The database keeps the internal table name `sections`, while the application consistently uses “Class” for users.
+
+For an existing project, also run `supabase/security-hardening.sql` after the class migration. It removes overly broad Row Level Security policies and prevents teachers from reading or changing records outside their own classes.
 
 ## 2. Configure local environment variables
 
@@ -58,7 +60,7 @@ Create a student:
 npm run create-user -- student@example.edu "ChangeThisPassword!" "Student Name" student
 ```
 
-The script creates a confirmed Supabase Auth user and the matching secured profile. Use unique, strong passwords and send credentials privately.
+The script creates a confirmed Supabase Auth user and the matching secured profile. It is intended for local administrator setup only; do not place real passwords in shell history, documentation, issues, or commits.
 
 ## 5. Run the application
 
@@ -81,11 +83,12 @@ Open `http://127.0.0.1:8765`.
 ## Project structure
 
 ```text
-dist/                 Browser interface
-scripts/create-user.mjs  Account creation utility
-supabase/schema.sql   Database schema and security policies
-serve.mjs             Node API and static-file server
-.env.example          Environment variable template
+public/               Browser interface served by Node
+src/server/           HTTP server, routes, auth, and utilities
+scripts/              Local administration utilities
+supabase/             Database schema and migrations
+serve.mjs             Small application entry point
+.env.example          Safe environment-variable template
 ```
 
 ## Useful commands
