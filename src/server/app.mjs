@@ -411,7 +411,15 @@ async function handleApi(req, res, url) {
   throw new HttpError(404, 'API route not found.');
 }
 
-const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8' };
+const mime = {
+  '.html':'text/html; charset=utf-8',
+  '.css':'text/css; charset=utf-8',
+  '.js':'text/javascript; charset=utf-8',
+  '.png':'image/png',
+  '.webp':'image/webp',
+  '.jpg':'image/jpeg',
+  '.jpeg':'image/jpeg',
+};
 export async function handleRequest(req,res) {
   try {
     setSecurityHeaders(res);
