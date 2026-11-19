@@ -4,7 +4,7 @@ import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { admin, config, createAuthClient } from './config.mjs';
 import { createAuthorizer } from './auth.mjs';
 import { HttpError, getCookies, parseJsonBody as parseBody, sendJson as send } from './http.mjs';
-import { httpUrl, requiredText as assertText } from './validation.mjs';
+import { emailAddress, httpUrl, requiredText as assertText } from './validation.mjs';
 
 const root = config.publicDirectory;
 const requireUser = createAuthorizer({ admin, createAuthClient });
@@ -173,6 +173,31 @@ async function handleApi(req, res, url) {
     }, { 'set-cookie': sessionCookies(data.session) });
   }
 
+  if (req.method === 'POST' && path === '/api/invitations/session') {
+    limitAuthentication(req);
+    const body = await parseBody(req);
+    const accessToken = assertText(body.accessToken,'Invitation access token',10000);
+    const refreshToken = assertText(body.refreshToken,'Invitation refresh token',10000);
+    const client = createAuthClient();
+    const { data, error } = await client.auth.setSession({ access_token:accessToken, refresh_token:refreshToken });
+    if (error || !data.session || !data.user) throw new HttpError(401,'This invitation is invalid or has expired. Ask your teacher to send a new invitation.');
+    const { data:profile } = await admin.from('profiles').select('id,name,role,active').eq('id',data.user.id).eq('role','student').maybeSingle();
+    if (!profile?.active) throw new HttpError(403,'This student invitation is not active.');
+    return send(res,200,{user:{id:profile.id,name:profile.name,email:data.user.email,role:profile.role}},{'set-cookie':sessionCookies(data.session)});
+  }
+
+  if (req.method === 'POST' && path === '/api/invitations/password') {
+    const student = await requireUser(req,'student');
+    const body = await parseBody(req);
+    const password = assertText(body.password,'Password',200);
+    if (password.length < 10 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+      throw new HttpError(400,'Use at least 10 characters with an uppercase letter, lowercase letter, and number.');
+    }
+    const { error } = await admin.auth.admin.updateUserById(student.id,{password});
+    if (error) throw new HttpError(400,error.message);
+    return send(res,200,{ok:true});
+  }
+
   if (req.method === 'POST' && path === '/api/refresh') {
     const body = await parseBody(req);
     const refreshToken = String(body.refreshToken || getCookies(req).rizlife_refresh || '');
@@ -292,11 +317,23 @@ async function handleApi(req, res, url) {
     const teacher = await requireUser(req,'teacher');
     const section = await requireOwnedSection(teacher.id,sectionStudentMatch[1]);
     const body = await parseBody(req);
-    const email = assertText(body.email,'Student email',200).toLowerCase();
-    const password = assertText(body.password,'Temporary password',200);
+    const email = emailAddress(body.email,'Student email');
     const name = assertText(body.name,'Student name',100);
-    if (password.length < 8) throw new HttpError(400,'Temporary password must be at least 8 characters.');
-    const { data:created,error:createError } = await admin.auth.admin.createUser({email,password,email_confirm:true});
+    const { data:users, error:listError } = await admin.auth.admin.listUsers({page:1,perPage:1000});
+    if (listError) throw listError;
+    const existing = users.users.find(user=>user.email?.toLowerCase()===email);
+    if (existing) {
+      const { data:profile } = await admin.from('profiles').select('id,name,role,active').eq('id',existing.id).maybeSingle();
+      if (!profile || profile.role !== 'student' || !profile.active) throw new HttpError(409,'This email already belongs to another account.');
+      const { error:enrollmentError } = await admin.from('section_students').insert({section_id:section.id,student_id:existing.id});
+      if (enrollmentError?.code==='23505') throw new HttpError(409,'This student is already enrolled in the class.');
+      if (enrollmentError) throw enrollmentError;
+      return send(res,201,{id:existing.id,name:profile.name,email,invitationSent:false,existing:true});
+    }
+    const { data:created,error:createError } = await admin.auth.admin.inviteUserByEmail(email,{
+      data:{name,role:'student'},
+      redirectTo:`${config.appUrl}/accept-invite`
+    });
     if (createError) throw new HttpError(400,createError.message);
     try {
       const { error:profileError } = await admin.from('profiles').insert({id:created.user.id,name,role:'student'});
@@ -307,7 +344,7 @@ async function handleApi(req, res, url) {
       await admin.auth.admin.deleteUser(created.user.id);
       throw error;
     }
-    return send(res,201,{id:created.user.id,name,email});
+    return send(res,201,{id:created.user.id,name,email,invitationSent:true,existing:false});
   }
 
   const enrollmentMatch = path.match(/^\/api\/teacher\/sections\/(\d+)\/students\/([0-9a-f-]+)$/i);
@@ -425,7 +462,7 @@ export async function handleRequest(req,res) {
     setSecurityHeaders(res);
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/api/')) return await handleApi(req,res,url);
-    const filePath = normalize(join(root, url.pathname === '/' ? 'index.html' : url.pathname.slice(1)));
+    const filePath = normalize(join(root, ['/', '/accept-invite'].includes(url.pathname) ? 'index.html' : url.pathname.slice(1)));
     const pathFromRoot = relative(root, filePath);
     if (pathFromRoot.startsWith('..') || isAbsolute(pathFromRoot)) throw new HttpError(403, 'Forbidden.');
     const file = await readFile(filePath);

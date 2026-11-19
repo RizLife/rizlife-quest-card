@@ -31,10 +31,22 @@ Fill in `.env`:
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 SUPABASE_SECRET_KEY=your-secret-key
+APP_URL=https://your-production-domain.example
 PORT=8765
 ```
 
 Never expose or commit `SUPABASE_SECRET_KEY`. It bypasses Row Level Security and is used only by the Node server.
+
+### Configure student invitation email
+
+Teachers enroll new students by sending an email invitation. For production delivery:
+
+1. In Supabase, open **Authentication > SMTP Settings** and configure a production SMTP provider.
+2. Open **Authentication > Email Templates > Invite user** and replace the template with `supabase/invite-email-template.html`.
+3. Under **Authentication > URL Configuration**, set the Site URL to the production application URL and allow `https://your-production-domain.example/accept-invite` as a Redirect URL.
+4. Set `APP_URL` to the same production origin in Vercel. Do not include a trailing slash.
+
+The invitation template intentionally sends students to a confirmation page before the real verification URL is opened. This prevents automated email link scanners from consuming the one-time invitation link.
 
 ## 3. Install dependencies
 

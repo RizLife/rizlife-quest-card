@@ -16,6 +16,7 @@ export const config = {
   publicDirectory: fileURLToPath(new URL('../../public/', import.meta.url)),
   supabaseUrl: process.env.SUPABASE_URL,
   publicKey: process.env.SUPABASE_PUBLISHABLE_KEY,
+  appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : `http://localhost:${Number(process.env.PORT || 8765)}`),
 };
 
 export const admin = createClient(config.supabaseUrl, process.env.SUPABASE_SECRET_KEY, {

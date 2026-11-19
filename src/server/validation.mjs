@@ -16,3 +16,9 @@ export function httpUrl(value, label = 'Link') {
     throw new HttpError(400, `Enter a valid http or https ${label.toLowerCase()}.`);
   }
 }
+
+export function emailAddress(value, label = 'Email address') {
+  const email = requiredText(value, label, 200).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, `Enter a valid ${label.toLowerCase()}.`);
+  return email;
+}
