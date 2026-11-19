@@ -5,13 +5,22 @@ export class HttpError extends Error {
   }
 }
 
-export function sendJson(response, status, data) {
+export function sendJson(response, status, data, headers = {}) {
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
+    ...headers,
   });
   response.end(JSON.stringify(data));
+}
+
+export function getCookies(request) {
+  return Object.fromEntries((request.headers.cookie || '').split(';').flatMap((entry) => {
+    const separator = entry.indexOf('=');
+    if (separator < 0) return [];
+    return [[entry.slice(0, separator).trim(), decodeURIComponent(entry.slice(separator + 1).trim())]];
+  }));
 }
 
 export async function parseJsonBody(request) {

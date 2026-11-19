@@ -1,8 +1,8 @@
-import { HttpError, getBearerToken } from './http.mjs';
+import { HttpError, getBearerToken, getCookies } from './http.mjs';
 
 export function createAuthorizer({ admin, createAuthClient }) {
   return async function requireUser(request, requiredRole) {
-    const token = getBearerToken(request);
+    const token = getBearerToken(request) || getCookies(request).rizlife_access;
     if (!token) throw new HttpError(401, 'Please sign in.');
 
     const { data: { user }, error } = await createAuthClient().auth.getUser(token);

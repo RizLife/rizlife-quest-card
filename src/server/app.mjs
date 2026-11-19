@@ -3,12 +3,28 @@ import { readFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { admin, config, createAuthClient } from './config.mjs';
 import { createAuthorizer } from './auth.mjs';
-import { HttpError, parseJsonBody as parseBody, sendJson as send } from './http.mjs';
+import { HttpError, getCookies, parseJsonBody as parseBody, sendJson as send } from './http.mjs';
 import { httpUrl, requiredText as assertText } from './validation.mjs';
 
 const root = config.publicDirectory;
 const requireUser = createAuthorizer({ admin, createAuthClient });
 const loginAttempts = new Map();
+
+function sessionCookies(session) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return [
+    `rizlife_access=${encodeURIComponent(session.access_token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${session.expires_in}${secure}`,
+    `rizlife_refresh=${encodeURIComponent(session.refresh_token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000${secure}`,
+  ];
+}
+
+function clearSessionCookies() {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return [
+    `rizlife_access=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
+    `rizlife_refresh=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
+  ];
+}
 
 function setSecurityHeaders(response) {
   response.setHeader('x-content-type-options', 'nosniff');
@@ -126,29 +142,29 @@ async function handleApi(req, res, url) {
     const { data:profile } = await admin.from('profiles').select('id,name,role,active').eq('id',data.user.id).single();
     if (!profile?.active) throw new HttpError(403, 'This account is not active.');
     return send(res, 200, {
-      token:data.session.access_token,
-      refreshToken:data.session.refresh_token,
       user:{ id:profile.id, name:profile.name, email:data.user.email, role:profile.role }
-    });
+    }, { 'set-cookie': sessionCookies(data.session) });
   }
 
   if (req.method === 'POST' && path === '/api/refresh') {
     const body = await parseBody(req);
-    const { data, error } = await createAuthClient().auth.refreshSession({ refresh_token:String(body.refreshToken || '') });
+    const refreshToken = String(body.refreshToken || getCookies(req).rizlife_refresh || '');
+    const { data, error } = await createAuthClient().auth.refreshSession({ refresh_token:refreshToken });
     if (error || !data.session) throw new HttpError(401, 'Please sign in again.');
-    return send(res, 200, { token:data.session.access_token, refreshToken:data.session.refresh_token });
+    return send(res, 200, { ok: true }, { 'set-cookie': sessionCookies(data.session) });
   }
 
   if (req.method === 'POST' && path === '/api/logout') {
     const token = requireUser(req).catch(() => null);
     const body = await parseBody(req);
     const user = await token;
-    if (user && body.refreshToken) {
+    const refreshToken = String(body.refreshToken || getCookies(req).rizlife_refresh || '');
+    if (user && refreshToken) {
       const client = createAuthClient();
-      await client.auth.setSession({ access_token: user.token, refresh_token: String(body.refreshToken) });
+      await client.auth.setSession({ access_token: user.token, refresh_token: refreshToken });
       await client.auth.signOut({ scope: 'global' });
     }
-    return send(res, 200, { ok: true });
+    return send(res, 200, { ok: true }, { 'set-cookie': clearSessionCookies() });
   }
 
   if (req.method === 'GET' && path === '/api/me') {

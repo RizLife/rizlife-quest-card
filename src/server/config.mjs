@@ -7,7 +7,7 @@ const missing = required.filter((name) => !process.env[name]);
 
 if (missing.length) {
   console.error(`Missing environment variables: ${missing.join(', ')}`);
-  console.error('Copy .env.example to .env and add your Supabase project credentials.');
+  console.error('Create a local .env file and add your Supabase project credentials.');
   process.exit(1);
 }
 
