@@ -1,0 +1,398 @@
+import 'dotenv/config';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
+import { createClient } from '@supabase/supabase-js';
+
+const required = ['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY'];
+const missing = required.filter(name => !process.env[name]);
+if (missing.length) {
+  console.error(`Missing environment variables: ${missing.join(', ')}`);
+  console.error('Copy .env.example to .env and add your Supabase project credentials.');
+  process.exit(1);
+}
+
+const port = Number(process.env.PORT || 8765);
+const root = join(process.cwd(), 'dist');
+const supabaseUrl = process.env.SUPABASE_URL;
+const publicKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+const admin = createClient(supabaseUrl, process.env.SUPABASE_SECRET_KEY, {
+  auth: { autoRefreshToken:false, persistSession:false, detectSessionInUrl:false }
+});
+const authClient = () => createClient(supabaseUrl, publicKey, {
+  auth: { autoRefreshToken:false, persistSession:false, detectSessionInUrl:false }
+});
+
+class HttpError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+
+function send(res, status, data) {
+  res.writeHead(status, { 'content-type':'application/json; charset=utf-8', 'cache-control':'no-store' });
+  res.end(JSON.stringify(data));
+}
+
+async function parseBody(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 1_000_000) throw new HttpError(413, 'Request is too large.');
+    chunks.push(chunk);
+  }
+  try { return JSON.parse(Buffer.concat(chunks).toString() || '{}'); }
+  catch { throw new HttpError(400, 'Invalid JSON request.'); }
+}
+
+function bearer(req) {
+  const value = req.headers.authorization || '';
+  return value.startsWith('Bearer ') ? value.slice(7) : '';
+}
+
+async function requireUser(req, role) {
+  const token = bearer(req);
+  if (!token) throw new HttpError(401, 'Please sign in.');
+  const { data:{ user }, error } = await authClient().auth.getUser(token);
+  if (error || !user) throw new HttpError(401, 'Your session has expired. Please sign in again.');
+  const { data:profile, error:profileError } = await admin.from('profiles').select('id,name,role,active').eq('id', user.id).single();
+  if (profileError || !profile?.active) throw new HttpError(403, 'This account is not active.');
+  if (role && profile.role !== role) throw new HttpError(403, 'You do not have permission for this action.');
+  return { ...profile, email:user.email, token };
+}
+
+function assertText(value, label, max=5000) {
+  const text = String(value || '').trim();
+  if (!text) throw new HttpError(400, `${label} is required.`);
+  if (text.length > max) throw new HttpError(400, `${label} is too long.`);
+  return text;
+}
+
+async function latestSubmissions(studentId=null) {
+  let query = admin.from('submissions').select('*').order('id', { ascending:false });
+  if (studentId) query = query.eq('student_id', studentId);
+  const { data, error } = await query;
+  if (error) throw error;
+  const seen = new Set();
+  return data.filter(row => {
+    const key = `${row.student_id}:${row.quest_id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function studentCard(studentId) {
+  const { data:enrollments, error:enrollmentError } = await admin.from('section_students').select('section_id').eq('student_id',studentId);
+  if (enrollmentError) throw enrollmentError;
+  const sectionIds = enrollments.map(row=>row.section_id);
+  if (!sectionIds.length) return [];
+  const [{ data:quests, error:questError }, submissions] = await Promise.all([
+    admin.from('quests').select('id,title,description,requirement,section_id').in('section_id',sectionIds).eq('active', true).order('id'),
+    latestSubmissions(studentId)
+  ]);
+  if (questError) throw questError;
+  const byQuest = new Map(submissions.map(row => [Number(row.quest_id), row]));
+  return quests.map(quest => ({ ...quest, submission:byQuest.get(Number(quest.id)) || null }));
+}
+
+async function requireOwnedSection(teacherId, sectionId) {
+  const id = Number(sectionId);
+  if (!id) throw new HttpError(400, 'Select a class first.');
+  const { data, error } = await admin.from('sections').select('id,name').eq('id',id).eq('teacher_id',teacherId).eq('active',true).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new HttpError(404, 'Class not found.');
+  return data;
+}
+
+async function dashboardData(teacherId, sectionId) {
+  const section = await requireOwnedSection(teacherId, sectionId);
+  const { data:enrollments, error:enrollmentError } = await admin.from('section_students').select('student_id').eq('section_id',section.id);
+  if (enrollmentError) throw enrollmentError;
+  const studentIds = enrollments.map(row=>row.student_id);
+  const profileQuery = studentIds.length ? admin.from('profiles').select('id,name,active').in('id',studentIds).eq('active',true).order('name') : Promise.resolve({data:[],error:null});
+  const [{ data:profiles, error:profileError }, { data:quests, error:questError }, { data:allSubmissions, error:submissionError }] = await Promise.all([
+    profileQuery,
+    admin.from('quests').select('id,title').eq('section_id',section.id).eq('active',true).order('id'),
+    admin.from('submissions').select('*').order('id',{ascending:false})
+  ]);
+  if (profileError || questError || submissionError) throw profileError || questError || submissionError;
+
+  const questIds = new Set(quests.map(q=>Number(q.id)));
+  const sectionSubmissions = allSubmissions.filter(row=>questIds.has(Number(row.quest_id)) && studentIds.includes(row.student_id));
+  const latest = [];
+  const seen = new Set();
+  for (const row of sectionSubmissions) {
+    const key = `${row.student_id}:${row.quest_id}`;
+    if (!seen.has(key)) { seen.add(key); latest.push(row); }
+  }
+  const profileMap = new Map(profiles.map(profile => [profile.id, profile]));
+  const questMap = new Map(quests.map(quest => [Number(quest.id), quest]));
+  const students = profiles.map(profile => {
+    const rows = latest.filter(row => row.student_id === profile.id);
+    return {
+      id:profile.id,
+      name:profile.name,
+      email:'',
+      verified:rows.filter(row=>row.status==='verified').length,
+      submitted:rows.filter(row=>row.status==='submitted').length,
+      rejected:rows.filter(row=>row.status==='rejected').length
+    };
+  });
+  const decorate = row => ({
+    ...row,
+    student_name:profileMap.get(row.student_id)?.name || 'Unknown student',
+    title:questMap.get(Number(row.quest_id))?.title || 'Archived task'
+  });
+  return {
+    students,
+    queue:latest.filter(row=>row.status==='submitted').sort((a,b)=>new Date(a.submitted_at)-new Date(b.submitted_at)).map(decorate),
+    recent:sectionSubmissions.filter(row=>row.status!=='submitted'&&row.reviewed_at).slice(0,8).map(decorate),
+    taskCount:quests.length,
+    section
+  };
+}
+
+async function handleApi(req, res, url) {
+  const path = url.pathname;
+
+  if (req.method === 'POST' && path === '/api/login') {
+    const body = await parseBody(req);
+    const { data, error } = await authClient().auth.signInWithPassword({
+      email:String(body.email || '').trim(), password:String(body.password || '')
+    });
+    if (error || !data.session) throw new HttpError(401, 'Invalid email or password.');
+    const { data:profile } = await admin.from('profiles').select('id,name,role,active').eq('id',data.user.id).single();
+    if (!profile?.active) throw new HttpError(403, 'This account is not active.');
+    return send(res, 200, {
+      token:data.session.access_token,
+      refreshToken:data.session.refresh_token,
+      user:{ id:profile.id, name:profile.name, email:data.user.email, role:profile.role }
+    });
+  }
+
+  if (req.method === 'POST' && path === '/api/refresh') {
+    const body = await parseBody(req);
+    const { data, error } = await authClient().auth.refreshSession({ refresh_token:String(body.refreshToken || '') });
+    if (error || !data.session) throw new HttpError(401, 'Please sign in again.');
+    return send(res, 200, { token:data.session.access_token, refreshToken:data.session.refresh_token });
+  }
+
+  if (req.method === 'POST' && path === '/api/logout') return send(res, 200, { ok:true });
+
+  if (req.method === 'GET' && path === '/api/me') {
+    const user = await requireUser(req);
+    return send(res, 200, { user:{ id:user.id, name:user.name, email:user.email, role:user.role } });
+  }
+
+  if (req.method === 'GET' && path === '/api/student/card') {
+    const user = await requireUser(req, 'student');
+    return send(res, 200, { quests:await studentCard(user.id) });
+  }
+
+  const submitMatch = path.match(/^\/api\/quests\/(\d+)\/submit$/);
+  if (req.method === 'POST' && submitMatch) {
+    const user = await requireUser(req, 'student');
+    const questId = Number(submitMatch[1]);
+    const { data:quest } = await admin.from('quests').select('id,section_id').eq('id',questId).eq('active',true).maybeSingle();
+    if (!quest) throw new HttpError(404, 'Task not found.');
+    const { data:enrollment } = await admin.from('section_students').select('student_id').eq('section_id',quest.section_id).eq('student_id',user.id).maybeSingle();
+    if (!enrollment) throw new HttpError(403, 'You are not enrolled in this task’s class.');
+    const current = (await latestSubmissions(user.id)).find(row=>Number(row.quest_id)===questId);
+    if (current && current.status !== 'rejected') throw new HttpError(409, 'This task already has an active submission.');
+    const body = await parseBody(req);
+    const evidenceType = String(body.type || '');
+    const evidence = assertText(body.evidence, 'Evidence');
+    if (!['link','text','image'].includes(evidenceType)) throw new HttpError(400, 'Choose a valid evidence type.');
+    if (evidenceType !== 'text') {
+      try { const link=new URL(evidence); if(!['http:','https:'].includes(link.protocol)) throw new Error(); }
+      catch { throw new HttpError(400, 'Enter a valid http or https link.'); }
+    }
+    const { error } = await admin.from('submissions').insert({ student_id:user.id, quest_id:questId, evidence_type:evidenceType, evidence });
+    if (error) throw error;
+    return send(res, 201, { ok:true });
+  }
+
+  if (req.method === 'GET' && path === '/api/teacher/sections') {
+    const teacher = await requireUser(req, 'teacher');
+    const { data:sections, error } = await admin.from('sections').select('*').eq('teacher_id',teacher.id).eq('active',true).order('name');
+    if (error) throw error;
+    const { data:enrollments } = await admin.from('section_students').select('section_id');
+    const { data:quests } = await admin.from('quests').select('section_id').eq('active',true);
+    return send(res,200,{sections:sections.map(section=>({...section,studentCount:enrollments.filter(row=>Number(row.section_id)===Number(section.id)).length,taskCount:quests.filter(row=>Number(row.section_id)===Number(section.id)).length}))});
+  }
+
+  if (req.method === 'POST' && path === '/api/teacher/sections') {
+    const teacher = await requireUser(req, 'teacher');
+    const body = await parseBody(req);
+    const name = assertText(body.name,'Class name',50);
+    const { data,error } = await admin.from('sections').insert({teacher_id:teacher.id,name}).select('*').single();
+    if (error?.code==='23505') throw new HttpError(409,'You already have a class with this name.');
+    if (error) throw error;
+    return send(res,201,data);
+  }
+
+  const sectionMatch = path.match(/^\/api\/teacher\/sections\/(\d+)$/);
+  if (req.method === 'PATCH' && sectionMatch) {
+    const teacher = await requireUser(req,'teacher');
+    const section = await requireOwnedSection(teacher.id,sectionMatch[1]);
+    const body = await parseBody(req);
+    const name = assertText(body.name,'Class name',50);
+    const { data,error } = await admin.from('sections').update({name}).eq('id',section.id).eq('teacher_id',teacher.id).select('*').single();
+    if (error?.code==='23505') throw new HttpError(409,'You already have a class with this name.');
+    if (error) throw error;
+    return send(res,200,data);
+  }
+
+  if (req.method === 'DELETE' && sectionMatch) {
+    const teacher = await requireUser(req,'teacher');
+    const section = await requireOwnedSection(teacher.id,sectionMatch[1]);
+    const { error } = await admin.from('sections').delete().eq('id',section.id).eq('teacher_id',teacher.id);
+    if (error) throw error;
+    return send(res,200,{ok:true});
+  }
+
+  const sectionStudentMatch = path.match(/^\/api\/teacher\/sections\/(\d+)\/students$/);
+  if (req.method === 'POST' && sectionStudentMatch) {
+    const teacher = await requireUser(req,'teacher');
+    const section = await requireOwnedSection(teacher.id,sectionStudentMatch[1]);
+    const body = await parseBody(req);
+    const email = assertText(body.email,'Student email',200).toLowerCase();
+    const password = assertText(body.password,'Temporary password',200);
+    const name = assertText(body.name,'Student name',100);
+    if (password.length < 8) throw new HttpError(400,'Temporary password must be at least 8 characters.');
+    const { data:created,error:createError } = await admin.auth.admin.createUser({email,password,email_confirm:true});
+    if (createError) throw new HttpError(400,createError.message);
+    try {
+      const { error:profileError } = await admin.from('profiles').insert({id:created.user.id,name,role:'student'});
+      if (profileError) throw profileError;
+      const { error:enrollmentError } = await admin.from('section_students').insert({section_id:section.id,student_id:created.user.id});
+      if (enrollmentError) throw enrollmentError;
+    } catch(error) {
+      await admin.auth.admin.deleteUser(created.user.id);
+      throw error;
+    }
+    return send(res,201,{id:created.user.id,name,email});
+  }
+
+  const enrollmentMatch = path.match(/^\/api\/teacher\/sections\/(\d+)\/students\/([0-9a-f-]+)$/i);
+  if (req.method === 'DELETE' && enrollmentMatch) {
+    const teacher = await requireUser(req,'teacher');
+    const section = await requireOwnedSection(teacher.id,enrollmentMatch[1]);
+    const { error } = await admin.from('section_students').delete().eq('section_id',section.id).eq('student_id',enrollmentMatch[2]);
+    if (error) throw error;
+    return send(res,200,{ok:true});
+  }
+
+  if (req.method === 'GET' && path === '/api/teacher/dashboard') {
+    const teacher = await requireUser(req, 'teacher');
+    return send(res, 200, await dashboardData(teacher.id,url.searchParams.get('sectionId')));
+  }
+
+  const studentMatch = path.match(/^\/api\/teacher\/students\/([0-9a-f-]+)$/i);
+  if (req.method === 'GET' && studentMatch) {
+    const teacher = await requireUser(req, 'teacher');
+    const section = await requireOwnedSection(teacher.id,url.searchParams.get('sectionId'));
+    const { data:membership } = await admin.from('section_students').select('student_id').eq('section_id',section.id).eq('student_id',studentMatch[1]).maybeSingle();
+    if (!membership) throw new HttpError(404,'Student is not enrolled in this class.');
+    const { data:student } = await admin.from('profiles').select('id,name').eq('id',studentMatch[1]).eq('role','student').maybeSingle();
+    if (!student) throw new HttpError(404, 'Student not found.');
+    return send(res, 200, { student:{...student,email:''}, quests:await studentCard(student.id) });
+  }
+
+  const reviewMatch = path.match(/^\/api\/teacher\/submissions\/(\d+)$/);
+  if (req.method === 'PATCH' && reviewMatch) {
+    const teacher = await requireUser(req, 'teacher');
+    const body = await parseBody(req);
+    const section = await requireOwnedSection(teacher.id,body.sectionId);
+    const { data:submission } = await admin.from('submissions').select('id,quest_id').eq('id',Number(reviewMatch[1])).maybeSingle();
+    if (!submission) throw new HttpError(404,'Submission not found.');
+    const { data:sectionQuest } = await admin.from('quests').select('id').eq('id',submission.quest_id).eq('section_id',section.id).maybeSingle();
+    if (!sectionQuest) throw new HttpError(403,'This submission belongs to another class.');
+    const status = String(body.status || '');
+    const feedback = String(body.feedback || '').trim();
+    if (!['verified','rejected'].includes(status)) throw new HttpError(400, 'Invalid review decision.');
+    if (status === 'rejected' && !feedback) throw new HttpError(400, 'Feedback is required when returning work.');
+    const { data, error } = await admin.from('submissions').update({
+      status,
+      feedback:feedback || 'Requirement verified.',
+      reviewed_at:new Date().toISOString(),
+      reviewed_by:teacher.id
+    }).eq('id',Number(reviewMatch[1])).eq('status','submitted').select('id').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new HttpError(409, 'This submission has already been reviewed.');
+    return send(res, 200, { ok:true });
+  }
+
+  if (req.method === 'GET' && path === '/api/teacher/quests') {
+    const teacher = await requireUser(req, 'teacher');
+    const section = await requireOwnedSection(teacher.id,url.searchParams.get('sectionId'));
+    const { data, error } = await admin.from('quests').select('*').eq('section_id',section.id).order('active',{ascending:false}).order('id');
+    if (error) throw error;
+    return send(res, 200, { quests:data });
+  }
+
+  if (req.method === 'POST' && path === '/api/teacher/quests') {
+    const teacher = await requireUser(req, 'teacher');
+    const body = await parseBody(req);
+    const section = await requireOwnedSection(teacher.id,body.sectionId);
+    const record = {
+      title:assertText(body.title,'Task title',120),
+      description:assertText(body.description,'Instructions',2000),
+      requirement:assertText(body.requirement,'Evidence requirement',500),
+      created_by:teacher.id,
+      section_id:section.id
+    };
+    const { data, error } = await admin.from('quests').insert(record).select('id').single();
+    if (error) throw error;
+    return send(res, 201, data);
+  }
+
+  const questMatch = path.match(/^\/api\/teacher\/quests\/(\d+)$/);
+  if (req.method === 'PUT' && questMatch) {
+    const teacher = await requireUser(req, 'teacher');
+    const body = await parseBody(req);
+    const section = await requireOwnedSection(teacher.id,body.sectionId);
+    const { error } = await admin.from('quests').update({
+      title:assertText(body.title,'Task title',120),
+      description:assertText(body.description,'Instructions',2000),
+      requirement:assertText(body.requirement,'Evidence requirement',500)
+    }).eq('id',Number(questMatch[1])).eq('section_id',section.id);
+    if (error) throw error;
+    return send(res, 200, { ok:true });
+  }
+
+  const statusMatch = path.match(/^\/api\/teacher\/quests\/(\d+)\/status$/);
+  if (req.method === 'PATCH' && statusMatch) {
+    const teacher = await requireUser(req, 'teacher');
+    const body = await parseBody(req);
+    const section = await requireOwnedSection(teacher.id,body.sectionId);
+    if (typeof body.active !== 'boolean') throw new HttpError(400, 'Active status is required.');
+    const { error } = await admin.from('quests').update({ active:body.active }).eq('id',Number(statusMatch[1])).eq('section_id',section.id);
+    if (error) throw error;
+    return send(res, 200, { ok:true });
+  }
+
+  throw new HttpError(404, 'API route not found.');
+}
+
+const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8' };
+createServer(async (req,res) => {
+  try {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname.startsWith('/api/')) return await handleApi(req,res,url);
+    const filePath = normalize(join(root, url.pathname === '/' ? 'index.html' : url.pathname.slice(1)));
+    if (!filePath.startsWith(root)) throw new HttpError(403, 'Forbidden.');
+    const file = await readFile(filePath);
+    res.writeHead(200, { 'content-type':mime[extname(filePath)] || 'application/octet-stream' });
+    res.end(file);
+  } catch (error) {
+    if (res.headersSent) return res.end();
+    if (req.url?.startsWith('/api/')) {
+      if (!error.status) console.error(error);
+      return send(res, error.status || 500, { error:error.status ? error.message : 'The server could not complete the request.' });
+    }
+    res.writeHead(error.status || 404);
+    res.end(error.message || 'Not found');
+  }
+}).listen(port, '127.0.0.1', () => console.log(`RizLife running at http://127.0.0.1:${port}`));
