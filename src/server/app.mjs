@@ -168,9 +168,6 @@ async function handleApi(req, res, url) {
     if (error || !data.session) throw new HttpError(401, 'Invalid email or password.');
     const { data:profile } = await admin.from('profiles').select('id,name,role,active').eq('id',data.user.id).single();
     if (!profile?.active) throw new HttpError(403, 'This account is not active.');
-    const requestedRole = String(body.role || '');
-    if (!['student','teacher'].includes(requestedRole)) throw new HttpError(400, 'Choose the student or teacher portal.');
-    if (profile.role !== requestedRole) throw new HttpError(403, `This account belongs to the ${profile.role} portal.`);
     return send(res, 200, {
       user:{ id:profile.id, name:profile.name, email:data.user.email, role:profile.role }
     }, { 'set-cookie': sessionCookies(data.session) });
