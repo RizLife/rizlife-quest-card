@@ -26,6 +26,23 @@ button,a,input,textarea,select{transition:border-color .18s ease,background-colo
 .sidebar-course{margin-top:auto;margin-bottom:15px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.045);border-radius:12px;padding:14px;color:#fff;display:grid;gap:3px}.sidebar-course span{font-size:9px;letter-spacing:.12em;color:var(--gold);font-weight:800}.sidebar-course b{font-family:"Manrope",sans-serif;font-size:15px}.sidebar-course small{font-size:10px;color:#aeb9ca}
 .sidebar-user{margin-top:0;border-top:1px solid rgba(255,255,255,.1);padding-top:16px}.avatar{background:var(--gold);color:var(--primary-dark)}
 .sidebar-collapsed{grid-template-columns:82px minmax(0,1fr)}.sidebar-collapsed .sidebar{width:82px}.sidebar-collapsed .sidebar-brand{min-height:118px}.sidebar-collapsed .sidebar-brand .apc-logo{width:42px;height:42px}.sidebar-collapsed .nav-context,.sidebar-collapsed .sidebar-course{display:none}
+@media(min-width:781px){
+  .sidebar-collapsed{grid-template-columns:84px minmax(0,1fr)}
+  .sidebar-collapsed .sidebar{width:84px;padding:16px 12px 14px;align-items:stretch}
+  .sidebar-collapsed .sidebar-brand{min-height:116px;height:116px;padding:52px 0 18px;justify-content:center;align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,.11)}
+  .sidebar-collapsed .sidebar-brand .apc-logo{width:44px;height:44px;margin:0;flex:none}
+  .sidebar-collapsed .sidebar-collapse-button{left:50%;right:auto;top:0;width:42px;height:42px;border:1px solid rgba(255,255,255,.1);border-radius:12px;transform:translateX(-50%);background:rgba(255,255,255,.055)}
+  .sidebar-collapsed .sidebar nav{margin-top:18px;gap:8px}
+  .sidebar-collapsed .nav-link{position:relative;width:48px;height:48px;margin:0 auto;padding:0;justify-content:center;border-radius:12px;transform:none}
+  .sidebar-collapsed .nav-link:hover{transform:none;background:rgba(255,255,255,.08)}
+  .sidebar-collapsed .nav-link.active{background:rgba(76,99,151,.68);box-shadow:inset 3px 0 var(--gold),0 7px 16px rgba(5,16,44,.16)}
+  .sidebar-collapsed .nav-link svg{width:20px;height:20px}
+  .sidebar-collapsed .nav-link em{right:-5px;top:-4px;min-width:18px;height:18px;padding:1px 5px;display:grid;place-items:center}
+  .sidebar-collapsed .sidebar-user{width:100%;margin-top:auto;padding:18px 0 0;gap:11px;align-items:center;border-top:1px solid rgba(255,255,255,.11)}
+  .sidebar-collapsed .sidebar-user:before{display:none}
+  .sidebar-collapsed .sidebar-user .avatar,.sidebar-collapsed .sidebar-user .icon-btn{width:42px;height:42px;flex:none}
+  .sidebar-collapsed .sidebar-user .icon-btn{border-radius:11px}
+}
 
 /* Canvas, cards and controls */
 .student-shell,.teacher-shell{--canvas:#f5f7fb;--surface:#fff;--text:#18223a;--muted:#68738a;--border:#e3e8f0;--primary:#2b3b8c;--primary-dark:#142654;--primary-soft:#eef1fb;background:var(--canvas)}
