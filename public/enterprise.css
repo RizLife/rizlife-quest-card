@@ -1,0 +1,67 @@
+/* APC enterprise interface — shared visual system layered over the application UI. */
+:root{
+  --nav:#142654;--nav-hover:#213774;--nav-active:#2b3b8c;
+  --primary:#2b3b8c;--primary-dark:#142654;--primary-soft:#eef1fb;
+  --gold:#e5b33b;--gold-soft:#fbf5e4;--canvas:#f5f7fb;--surface:#fff;
+  --text:#18223a;--muted:#68738a;--border:#e3e8f0;--charcoal:#343a40;
+  --shadow:0 10px 30px rgba(20,38,84,.07);--shadow-hover:0 16px 38px rgba(20,38,84,.12);
+  --radius:14px
+}
+body{background:var(--canvas);color:var(--text);font-family:"DM Sans",Segoe UI,sans-serif}
+h1,h2,h3,.sidebar-brand b,.auth-institution b{font-family:"Manrope","DM Sans",sans-serif}
+button,a,input,textarea,select{transition:border-color .18s ease,background-color .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
+:focus-visible{outline:3px solid rgba(229,179,59,.5);outline-offset:2px}
+
+/* Navigation */
+.app-shell{grid-template-columns:276px minmax(0,1fr)}
+.sidebar{width:276px;background:linear-gradient(180deg,#142654 0%,#1c2d43 100%);padding:20px 16px;box-shadow:8px 0 30px rgba(20,38,84,.1)}
+.teacher-shell .sidebar,.student-shell .sidebar{background:linear-gradient(180deg,#142654 0%,#343a40 100%)}
+.sidebar-brand{min-height:72px;padding:0 44px 18px 4px;border-bottom:1px solid rgba(255,255,255,.1);gap:12px}
+.apc-logo{width:48px;height:48px;object-fit:contain;flex:none;filter:drop-shadow(0 3px 8px rgba(0,0,0,.18))}
+.sidebar-brand-copy b{font-size:14px;line-height:1.25;letter-spacing:-.01em;color:#fff}
+.sidebar-brand-copy span{font-size:11px;color:#e5b33b!important;margin-top:4px;letter-spacing:.04em;text-transform:uppercase;font-weight:700}
+.sidebar-collapse-button{right:0;top:4px;width:34px;height:34px;border:0;background:rgba(255,255,255,.06)}
+.nav-context{padding:22px 12px 11px;display:grid;gap:3px;color:#fff}.nav-context span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#95a3bc;font-weight:800}.nav-context b{font-size:13px}
+.sidebar nav{gap:7px}.nav-link{height:48px;border-radius:10px;padding:0 14px;color:#c8d0df;font-size:14px}.nav-link:hover{background:rgba(255,255,255,.07);color:#fff;transform:translateX(2px)}.nav-link.active{background:var(--primary);color:#fff;box-shadow:inset 3px 0 var(--gold),0 7px 18px rgba(5,16,44,.22)}.nav-link.active svg{color:var(--gold)}.nav-link em{background:var(--gold);color:var(--primary-dark);font-weight:800}
+.sidebar-course{margin-top:auto;margin-bottom:15px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.045);border-radius:12px;padding:14px;color:#fff;display:grid;gap:3px}.sidebar-course span{font-size:9px;letter-spacing:.12em;color:var(--gold);font-weight:800}.sidebar-course b{font-family:"Manrope",sans-serif;font-size:15px}.sidebar-course small{font-size:10px;color:#aeb9ca}
+.sidebar-user{margin-top:0;border-top:1px solid rgba(255,255,255,.1);padding-top:16px}.avatar{background:var(--gold);color:var(--primary-dark)}
+.sidebar-collapsed{grid-template-columns:82px minmax(0,1fr)}.sidebar-collapsed .sidebar{width:82px}.sidebar-collapsed .sidebar-brand{min-height:118px}.sidebar-collapsed .sidebar-brand .apc-logo{width:42px;height:42px}.sidebar-collapsed .nav-context,.sidebar-collapsed .sidebar-course{display:none}
+
+/* Canvas, cards and controls */
+.student-shell,.teacher-shell{--canvas:#f5f7fb;--surface:#fff;--text:#18223a;--muted:#68738a;--border:#e3e8f0;--primary:#2b3b8c;--primary-dark:#142654;--primary-soft:#eef1fb;background:var(--canvas)}
+.student-shell .content,.teacher-shell .content{max-width:1600px;padding:46px clamp(24px,4vw,68px) 80px}
+.teacher-page,.journey-page{max-width:1280px;margin:auto}
+.teacher-page-header,.journey-heading{margin-bottom:28px}.teacher-page-header h1,.journey-heading h1{font-size:clamp(32px,3.2vw,46px);line-height:1.08;letter-spacing:-.045em;color:var(--primary-dark)}
+.teacher-page-header p,.journey-heading p{font-size:15px;color:var(--muted)}
+.teacher-eyebrow,.journey-eyebrow,.quest-chapter,.auth-label{color:var(--primary);font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:800}
+.panel,.metric,.task-card,.scholar-panel,.scholar-empty,.submission-card,.journey-card,.journey-progress,.section-card{background:#fff;border-color:var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.scholar-panel,.submission-card,.journey-card,.task-card{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.journey-card:hover,.task-card:hover,.section-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-hover);border-color:#cfd6e5}
+.button{border-radius:9px;min-height:42px;padding:10px 16px}.button.primary,.teacher-shell .button.primary,.teacher-primary,.journey-primary{background:var(--gold);color:var(--primary-dark);box-shadow:0 5px 13px rgba(229,179,59,.22)}.button.primary:hover,.teacher-shell .button.primary:hover,.teacher-primary:hover,.journey-primary:hover{background:#d7a42c;color:#142654;transform:translateY(-1px)}
+.button.secondary{border-color:#d7ddea}.text-button,.more-button,.scholar-panel-head>a,.journey-section-head>a,.journey-link{color:var(--primary)}
+.form-field input,.form-field textarea,.form-field select,.search-box,.teacher-shell .search-box{border-radius:9px;border-color:#d8deea;background:#fff;min-height:44px}.form-field input:focus,.form-field textarea:focus{border-color:var(--primary);box-shadow:0 0 0 4px rgba(43,59,140,.1)}
+.status-pill{font-size:11px;padding:6px 10px}.progress-track i,.teacher-shell .progress-cell i{background:var(--gold)}
+
+/* Student dashboard */
+.journey-hero{background:linear-gradient(120deg,#142654 0%,#2b3b8c 72%);border:0;border-radius:18px;box-shadow:var(--shadow-hover);min-height:300px}.journey-hero:before{content:"";position:absolute;width:340px;height:340px;border:1px solid rgba(255,255,255,.12);border-radius:50%;right:60px;top:-160px}.journey-hero-copy{padding:40px}.journey-hero .journey-eyebrow{color:var(--gold)}.journey-hero h2{font-family:"Manrope",sans-serif;color:#fff;font-size:clamp(30px,3.4vw,44px);letter-spacing:-.04em}.journey-hero p{color:#d8dff1;font-size:14px}.journey-portrait img{filter:grayscale(1) contrast(1.05);mix-blend-mode:screen;opacity:.68}
+.journey-progress{border:0;padding:26px 30px}.journey-progress h2{font-family:"Manrope",sans-serif;color:var(--primary-dark)}.journey-progress-bar .progress-track{background:#e8ebf2}.journey-progress-bar .progress-track i{background:var(--gold)}
+.journey-list:before{border-color:#d9deea}.journey-node{border-color:#cfd6e5;background:#fff;color:var(--primary)}.journey-item.verified .journey-node{background:var(--primary);border-color:var(--primary)}.journey-item.current .journey-node{box-shadow:0 0 0 5px rgba(229,179,59,.24);border-color:var(--gold)}.journey-item.current .journey-card{border-color:var(--gold);box-shadow:var(--shadow)}
+.journey-milestone{background:linear-gradient(90deg,var(--gold-soft),#fff);border-color:#eedda8;border-radius:14px}.milestone-icon{background:var(--gold);color:var(--primary-dark)}
+
+/* Teacher dashboard */
+.teacher-brief{min-height:225px;background:linear-gradient(120deg,#142654,#2b3b8c);border:0;border-radius:18px;color:#fff;box-shadow:var(--shadow-hover)}.teacher-brief:after{content:"APC";right:30px;bottom:-52px;color:rgba(255,255,255,.04);font-family:"Manrope",sans-serif;font-size:150px}.teacher-brief h2{font-family:"Manrope",sans-serif;color:#fff}.teacher-brief p{color:#d5dcee}.teacher-brief .teacher-eyebrow{color:var(--gold)}.brief-progress{border-color:rgba(255,255,255,.18)}.brief-progress>span{color:#d5dcee}.brief-progress .progress-track{background:rgba(255,255,255,.18)}.brief-progress .progress-track i{background:var(--gold)}
+.teacher-metric{background:#fff;border-color:var(--border);border-radius:14px;box-shadow:var(--shadow);padding:20px}.teacher-metric-icon{background:var(--primary-soft);color:var(--primary)}.teacher-metric strong{color:var(--primary-dark)}
+.priority-panel,.journal-panel,.achievement-panel{border-top:0;position:relative;overflow:hidden}.priority-panel:before,.journal-panel:before,.achievement-panel:before{content:"";position:absolute;left:0;right:0;top:0;height:4px}.priority-panel:before{background:var(--gold)}.journal-panel:before{background:var(--primary)}.achievement-panel:before{background:var(--charcoal)}
+.teacher-shell th{background:#f3f5fa;color:#5d6980}.teacher-shell tbody tr:hover{background:#f7f8fc}.teacher-shell .section-card.active{border:2px solid var(--primary);background:var(--primary-soft)}.section-card-mark{background:var(--gold-soft)!important;color:#9b6c00!important}
+
+/* Authentication */
+.auth-layout{grid-template-columns:minmax(520px,1.15fr) minmax(440px,.85fr);background:#fff}
+.auth-brand{position:relative;overflow:hidden;place-items:center start;padding:clamp(50px,7vw,110px);background:linear-gradient(135deg,#142654 0%,#2b3b8c 100%)}.auth-brand:before{content:"";position:absolute;width:520px;height:520px;border:1px solid rgba(255,255,255,.11);border-radius:50%;right:-210px;top:-190px;box-shadow:0 0 0 90px rgba(255,255,255,.025),0 0 0 180px rgba(255,255,255,.02)}
+.auth-brand-inner{position:relative;z-index:2;max-width:650px}.auth-institution{display:flex;align-items:center;gap:15px;margin-bottom:90px}.auth-institution img{width:68px;height:68px;object-fit:contain;filter:drop-shadow(0 5px 10px rgba(0,0,0,.2))}.auth-institution b{display:block;font-size:18px}.auth-institution span{display:block;color:var(--gold);font-size:11px;text-transform:uppercase;letter-spacing:.11em;margin-top:4px;font-weight:700}.auth-label{display:block;color:var(--gold);margin-bottom:14px}.auth-label.dark{color:var(--primary)}.auth-brand h1{font-family:"Manrope",sans-serif;font-size:clamp(46px,5.2vw,74px);line-height:1.02;letter-spacing:-.06em;margin:0 0 24px;max-width:740px}.auth-brand h1 em{font-style:normal;color:var(--gold)}.auth-brand p{color:#d6ddef;max-width:580px;font-size:16px;line-height:1.75}.auth-trust{display:flex;gap:22px;flex-wrap:wrap;margin-top:38px;color:#e7ebf6;font-size:12px;font-weight:700}.auth-trust span{display:flex;align-items:center;gap:7px}.auth-trust svg{width:16px;color:var(--gold)}.auth-watermark{position:absolute;right:-35px;bottom:-90px;color:rgba(255,255,255,.035);font:800 240px/1 "Manrope",sans-serif;letter-spacing:-.1em}.auth-form-wrap{padding:60px}.auth-card{width:min(430px,100%)}.auth-card h2{font-family:"Manrope",sans-serif;color:var(--primary-dark);font-size:34px;line-height:1.18;letter-spacing:-.04em}.auth-card .form-intro{font-size:14px;margin-bottom:32px}.auth-card .button{min-height:48px;font-size:14px}.auth-help{text-align:center;color:var(--muted);font-size:11px;margin:20px 0 0}.mobile-brand img{width:50px;height:50px;object-fit:contain}.mobile-brand div{display:grid}.mobile-brand span{font-size:11px;color:var(--muted)}
+
+/* Dialogs and utility surfaces */
+.dialog{border-radius:16px;box-shadow:0 28px 80px rgba(20,38,84,.25)}.modal-layer{background:rgba(20,38,84,.62);backdrop-filter:blur(5px)}.detail-block{background:#f5f7fb;border-color:var(--border);border-radius:10px}.toast{background:var(--primary-dark);border-radius:10px}
+
+@media(max-width:1080px){.app-shell{grid-template-columns:244px minmax(0,1fr)}.sidebar{width:244px}.auth-brand{padding:60px}.auth-institution{margin-bottom:60px}.auth-brand h1{font-size:50px}}
+@media(max-width:780px){.app-shell,.sidebar-collapsed{display:block}.sidebar,.sidebar-collapsed .sidebar{width:min(310px,88vw)}.nav-context{padding-top:18px}.sidebar-course{display:grid}.workspace-header{height:70px;background:#fff;border-color:var(--border);box-shadow:0 4px 15px rgba(20,38,84,.05)}.workspace-header .mobile-logo{gap:10px}.workspace-header .mobile-logo .apc-logo{width:38px;height:38px}.workspace-header .mobile-logo b{color:var(--primary-dark);font-size:13px}.workspace-header .mobile-logo span{font-size:10px}.student-shell .content,.teacher-shell .content{padding:28px 20px 90px}.auth-layout{display:block;padding:0}.auth-brand{display:none}.auth-form-wrap{min-height:100vh;padding:32px 20px;background:linear-gradient(180deg,#eef1fb,#fff 42%)}.auth-card{background:#fff;padding:30px;border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow)}.mobile-brand{display:flex}.student-bottom-nav{background:#fff;border-color:var(--border)}.student-bottom-nav a.active{background:var(--primary-soft);color:var(--primary)}.journey-hero-copy{padding:30px}}
+@media(max-width:600px){.student-shell .content,.teacher-shell .content{padding:24px 15px 90px}.teacher-page-header h1,.journey-heading h1{font-size:32px}.journey-hero{min-height:280px}.journey-hero-copy{padding:25px 22px}.teacher-metrics{grid-template-columns:1fr 1fr}.auth-card{padding:25px 21px}.auth-card h2{font-size:28px}}
+@media(prefers-reduced-motion:reduce){button,a,input,textarea,select,.journey-card,.task-card,.section-card{transition:none!important}}
