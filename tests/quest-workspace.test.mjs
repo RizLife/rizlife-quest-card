@@ -49,5 +49,5 @@ test('student dashboard previews four quests and uses completed language', () =>
   assert.match(app, /previewQuests\.map\(\(q,i\)=>journeyItem\(q,i,next\?\.id\)\)/);
   assert.match(app, /<a href="#quests">View all quests<\/a>/);
   assert.match(app, /\['verified','Completed'\]/);
-  assert.match(app, /role==='teacher'\?'Verified':'Completed'/);
+  assert.match(app, /verified:'Completed'/);
 });
