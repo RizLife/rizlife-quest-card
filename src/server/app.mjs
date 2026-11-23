@@ -63,10 +63,32 @@ function setSecurityHeaders(response) {
   response.setHeader('x-frame-options', 'DENY');
   response.setHeader('referrer-policy', 'strict-origin-when-cross-origin');
   response.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+  response.setHeader('content-security-policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; upgrade-insecure-requests");
+  response.setHeader('cross-origin-opener-policy', 'same-origin');
+  response.setHeader('cross-origin-resource-policy', 'same-origin');
+  if (process.env.NODE_ENV === 'production') response.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
+}
+
+function clientAddress(request) {
+  const forwarded = String(request.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return String(request.headers['x-real-ip'] || forwarded || request.socket.remoteAddress || 'unknown').slice(0, 100);
+}
+
+function enforceSameOrigin(request) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method || 'GET')) return;
+  const origin = request.headers.origin;
+  if (!origin) return;
+  const host = String(request.headers['x-forwarded-host'] || request.headers.host || '').split(',')[0].trim().toLowerCase();
+  const protocol = String(request.headers['x-forwarded-proto'] || (process.env.NODE_ENV === 'production' ? 'https' : 'http')).split(',')[0].trim().toLowerCase();
+  let supplied;
+  try { supplied = new URL(origin); } catch { throw new HttpError(403, 'This request origin is not allowed.'); }
+  if (!host || supplied.host.toLowerCase() !== host || supplied.protocol !== `${protocol}:`) {
+    throw new HttpError(403, 'This request origin is not allowed.');
+  }
 }
 
 function limitAuthentication(request) {
-  const key = request.socket.remoteAddress || 'unknown';
+  const key = clientAddress(request);
   const now = Date.now();
   const windowMs = 15 * 60 * 1000;
   const limit = 10;
@@ -473,6 +495,7 @@ async function dashboardData(teacherId, sectionId) {
 
 async function handleApi(req, res, url) {
   const path = url.pathname;
+  enforceSameOrigin(req);
 
   if (req.method === 'POST' && path === '/api/register') {
     limitAuthentication(req);

@@ -116,7 +116,10 @@ grant execute on function public.is_teacher() to authenticated;
 -- SECURITY DEFINER helpers avoid circular RLS checks between classes and enrollments.
 create or replace function public.owns_section(target_section_id bigint)
 returns boolean language sql security definer stable set search_path = '' as $$
-  select exists (select 1 from public.sections where id = target_section_id and teacher_id = (select auth.uid()));
+  select (select public.is_teacher()) and exists (
+    select 1 from public.sections
+    where id = target_section_id and teacher_id = (select auth.uid())
+  );
 $$;
 
 create or replace function public.is_enrolled_in_section(target_section_id bigint)
@@ -210,6 +213,15 @@ with check (
   and feedback is null
   and reviewed_at is null
   and reviewed_by is null
+  and exists (
+    select 1
+    from public.quests quest
+    join public.section_students enrollment
+      on enrollment.section_id = quest.section_id
+    where quest.id = submissions.quest_id
+      and quest.active = true
+      and enrollment.student_id = (select auth.uid())
+  )
 );
 
 -- Verification updates are intentionally not granted to authenticated users.

@@ -3,7 +3,10 @@
 
 create or replace function public.owns_section(target_section_id bigint)
 returns boolean language sql security definer stable set search_path = '' as $$
-  select exists (select 1 from public.sections where id = target_section_id and teacher_id = (select auth.uid()));
+  select (select public.is_teacher()) and exists (
+    select 1 from public.sections
+    where id = target_section_id and teacher_id = (select auth.uid())
+  );
 $$;
 
 create or replace function public.is_enrolled_in_section(target_section_id bigint)
@@ -35,3 +38,22 @@ drop policy if exists "teachers update quests" on public.quests;
 create policy "teachers update quests" on public.quests for update to authenticated using ((select public.owns_section(section_id))) with check ((select public.owns_section(section_id)));
 drop policy if exists "teachers read submissions" on public.submissions;
 create policy "teachers read submissions" on public.submissions for select to authenticated using (exists (select 1 from public.quests where id = submissions.quest_id and (select public.owns_section(section_id))));
+
+drop policy if exists "students submit own evidence" on public.submissions;
+create policy "students submit own evidence" on public.submissions for insert to authenticated
+with check (
+  student_id = (select auth.uid())
+  and status = 'submitted'
+  and feedback is null
+  and reviewed_at is null
+  and reviewed_by is null
+  and exists (
+    select 1
+    from public.quests quest
+    join public.section_students enrollment
+      on enrollment.section_id = quest.section_id
+    where quest.id = submissions.quest_id
+      and quest.active = true
+      and enrollment.student_id = (select auth.uid())
+  )
+);
