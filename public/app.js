@@ -1,6 +1,6 @@
 const app = document.querySelector('#app');
 const savedSection=localStorage.getItem('rizlife-section');
-const state = { user: null, student: null, studentClasses:null, teacher: null, sections:[], sectionId:savedSection==='all'?'all':Number(savedSection)||null, tasks: null, page: '', questFilter: 'all', questSearch:'', questSort:'number', selectedQuestId:null, studentSearch: '', studentStatus:'all', studentSort:'name', studentPage:1, reviewStatus:'pending', reviewSearch: '', reviewSort:'oldest', reviewPage:1, sidebarCollapsed:localStorage.getItem('rizlife-sidebar')==='collapsed', assistantOpen:false, assistantMessages:[] };
+const state = { user: null, student: null, studentClasses:null, teacher: null, sections:[], sectionId:savedSection==='all'?'all':Number(savedSection)||null, tasks: null, page: '', questFilter: 'all', questSearch:'', questSort:'number', selectedQuestId:null, studentSearch: '', studentStatus:'all', studentSort:'name', studentPage:1, reviewStatus:'pending', reviewSearch:'', reviewSection:'all', reviewSort:'oldest', reviewPage:1, sidebarCollapsed:localStorage.getItem('rizlife-sidebar')==='collapsed', assistantOpen:false, assistantMessages:[] };
 
 const icons = {
   home:'<svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V21h-6v-6H9v6H3z"/></svg>',
@@ -204,7 +204,7 @@ async function submitQuest(event,id){
 }
 function renderTeacher(){if(state.page==='overview')return teacherOverview();if(state.page==='tasks')return teacherTasks();if(state.page==='reviews')return teacherReviews();teacherSections()}
 function sectionSelector(allowAll=true){if(!state.sections.length)return '';return `<label class="section-select"><span>Section</span><select onchange="changeSection(this.value)">${allowAll&&state.sections.length>1?`<option value="all" ${state.sectionId==='all'?'selected':''}>All Sections</option>`:''}${state.sections.map(s=>`<option value="${s.id}" ${Number(s.id)===Number(state.sectionId)?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}</select></label>`}
-async function changeSection(id){state.sectionId=id==='all'?'all':Number(id);state.studentPage=1;state.reviewPage=1;localStorage.setItem('rizlife-section',state.sectionId);state.tasks=null;shell(contentSkeleton('Switching section'));try{state.teacher=await api(`/teacher/dashboard?sectionId=${state.sectionId}`);route()}catch(e){errorScreen(e.message)}}
+async function changeSection(id){state.sectionId=id==='all'?'all':Number(id);state.studentPage=1;state.reviewPage=1;state.reviewSection='all';localStorage.setItem('rizlife-section',state.sectionId);state.tasks=null;shell(contentSkeleton('Switching section'));try{state.teacher=await api(`/teacher/dashboard?sectionId=${state.sectionId}`);route()}catch(e){errorScreen(e.message)}}
 function teacherOverviewStats(d){
   const byStudent=new Map();
   for(const student of d.students){const current=byStudent.get(student.id)||{assigned:0,verified:0};current.assigned+=Number(student.taskCount||0);current.verified+=Number(student.verified||0);byStudent.set(student.id,current)}
@@ -279,10 +279,10 @@ async function setTaskStatus(id,active){
     void refreshTeacherSummary();
   }catch(e){showToast(e.message,'error')}
 }
-function teacherReviewItems(all,status,search,sort){
+function teacherReviewItems(all,status,search,sort,section='all'){
   const statusMap={pending:'submitted',verified:'verified',returned:'rejected'};
   const term=search.trim().toLocaleLowerCase();
-  return all.filter(item=>(status==='all'||item.status===statusMap[status])&&`${item.student_name} ${item.title}`.toLocaleLowerCase().includes(term))
+  return all.filter(item=>(status==='all'||item.status===statusMap[status])&&(section==='all'||String(item.section_id)===String(section))&&`${item.student_name} ${item.title}`.toLocaleLowerCase().includes(term))
     .sort((a,b)=>(sort==='newest'?-1:1)*(new Date(a.submitted_at)-new Date(b.submitted_at)));
 }
 function teacherReviews(){
@@ -290,18 +290,24 @@ function teacherReviews(){
   const all=state.teacher.reviews||state.teacher.queue||[];
   const statusMap={pending:'submitted',verified:'verified',returned:'rejected'};
   const term=state.reviewSearch.trim();
-  const items=teacherReviewItems(all,state.reviewStatus,term,state.reviewSort);
+  const sectionRows=[...new Map(all.filter(item=>item.section_id).map(item=>[String(item.section_id),{id:String(item.section_id),name:item.section_name||'Section'}])).values()].sort((a,b)=>a.name.localeCompare(b.name));
+  if(state.reviewSection!=='all'&&!sectionRows.some(section=>section.id===String(state.reviewSection)))state.reviewSection='all';
+  const scoped=teacherReviewItems(all,'all','',state.reviewSort,state.reviewSection);
+  const items=teacherReviewItems(all,state.reviewStatus,term,state.reviewSort,state.reviewSection);
   const pageSize=20,totalPages=Math.max(1,Math.ceil(items.length/pageSize));
   state.reviewPage=Math.min(state.reviewPage,totalPages);
   const pageItems=items.slice((state.reviewPage-1)*pageSize,state.reviewPage*pageSize);
-  const filters=[['pending','Pending'],['verified','Completed'],['returned','Returned'],['all','All']];
-  const tabs=filters.map(([key,label])=>{const count=key==='all'?all.length:all.filter(item=>item.status===statusMap[key]).length;return `<button type="button" class="review-filter ${state.reviewStatus===key?'active':''}" onclick="setReviewStatus('${key}')" aria-pressed="${state.reviewStatus===key}">${label}<span>${count}</span></button>`}).join('');
-  const emptyTitle=state.reviewStatus==='pending'?'Review queue is clear':'No submissions found';
-  const emptyMessage=term?'Try a different student or task name.':state.reviewStatus==='pending'?'New student submissions will appear here.':'No submissions match this filter.';
-  shell(`<div class="teacher-page">${teacherPageHeader('Manuscript review','Submission reviews',`Review work from ${escapeHtml(state.teacher.section.name)} without losing your place.`,sectionSelector())}<section class="scholar-panel review-desk"><div class="review-desk-heading"><div><span class="teacher-eyebrow">Review desk</span><h2>${state.teacher.queue.length} awaiting review</h2><p>${all.length} submissions in the selected scope</p></div></div><div class="review-filters" aria-label="Filter submissions by status">${tabs}</div><div class="review-controls"><label class="search-box"><span aria-hidden="true">⌕</span><input id="review-search" value="${escapeHtml(state.reviewSearch)}" oninput="searchReviews(this,event)" placeholder="Search student or task" aria-label="Search student or task"></label><select aria-label="Sort submissions" onchange="state.reviewSort=this.value;state.reviewPage=1;teacherReviews()"><option value="oldest" ${state.reviewSort==='oldest'?'selected':''}>Oldest first</option><option value="newest" ${state.reviewSort==='newest'?'selected':''}>Newest first</option></select></div>${pageItems.length?`<div class="review-results">${pageItems.map(reviewListItem).join('')}</div>`:emptyState(emptyTitle,emptyMessage)}${pagination('review',state.reviewPage,totalPages,items.length)}</section></div>`);
+  const reviewCounts={all:scoped.length,pending:scoped.filter(item=>item.status==='submitted').length,returned:scoped.filter(item=>item.status==='rejected').length,verified:scoped.filter(item=>item.status==='verified').length};
+  const filters=[['all','All'],['pending','Pending'],['returned','Returned'],['verified','Completed']];
+  const tabs=filters.map(([key,label])=>`<button type="button" class="review-filter ${key==='pending'&&reviewCounts.pending?'attention':''} ${state.reviewStatus===key?'active':''}" onclick="setReviewStatus('${key}')" aria-pressed="${state.reviewStatus===key}">${label}<span>${reviewCounts[key]}</span></button>`).join('');
+  const emptyCopy=term?['No submissions match your search','Try another student name or task title.']:state.reviewStatus==='pending'?["You're all caught up",'No submissions are waiting for review.']:state.reviewStatus==='verified'?['No completed reviews yet','Completed submissions will appear here.']:state.reviewStatus==='returned'?['No returned submissions','Work returned for revision will appear here.']:['No submissions available','Student submissions will appear here.'];
+  const resetActive=Boolean(term||state.reviewSection!=='all'||state.reviewSort!=='oldest');
+  const sectionFilter=sectionRows.length>1?`<label class="review-select"><span>Section</span><select aria-label="Filter by section" onchange="state.reviewSection=this.value;state.reviewPage=1;teacherReviews()"><option value="all">All sections</option>${sectionRows.map(section=>`<option value="${escapeHtml(section.id)}" ${String(state.reviewSection)===section.id?'selected':''}>${escapeHtml(section.name)}</option>`).join('')}</select></label>`:'';
+  shell(`<div class="teacher-page review-page">${teacherPageHeader('Manuscript review','Submission reviews',`Review work from ${escapeHtml(state.teacher.section.name)} without losing your place.`,sectionSelector())}<section class="scholar-panel review-desk"><div class="review-summary" aria-label="Submission summary"><div><span>Total submissions</span><strong>${reviewCounts.all}</strong></div><div class="pending"><span>Pending reviews</span><strong>${reviewCounts.pending}</strong></div><div><span>Returned</span><strong>${reviewCounts.returned}</strong></div><div><span>Completed</span><strong>${reviewCounts.verified}</strong></div></div><div class="review-filters" aria-label="Filter submissions by status">${tabs}</div><div class="review-controls"><label class="search-box"><span aria-hidden="true">⌕</span><input id="review-search" value="${escapeHtml(state.reviewSearch)}" oninput="searchReviews(this,event)" placeholder="Search student or task" aria-label="Search student or task"></label>${sectionFilter}<label class="review-select"><span>Sort</span><select aria-label="Sort submissions" onchange="state.reviewSort=this.value;state.reviewPage=1;teacherReviews()"><option value="oldest" ${state.reviewSort==='oldest'?'selected':''}>Oldest first</option><option value="newest" ${state.reviewSort==='newest'?'selected':''}>Newest first</option></select></label>${resetActive?'<button type="button" class="review-reset" onclick="resetReviewControls()">Reset</button>':''}</div>${pageItems.length?`<div class="review-results">${pageItems.map(reviewListItem).join('')}</div>`:`<div class="review-empty">${emptyState(emptyCopy[0],emptyCopy[1])}</div>`}${pagination('review',state.reviewPage,totalPages,items.length)}</section></div>`);
 }
 function setReviewStatus(value){state.reviewStatus=value;state.reviewPage=1;teacherReviews()}
-function reviewListItem(item){return `<button type="button" class="review-result" onclick="openReview(${Number(item.id)})"><span class="avatar">${initials(item.student_name)}</span><span class="review-result-copy"><b>${escapeHtml(item.student_name)}</b><small>${escapeHtml(item.title)}${item.section_name?` · ${escapeHtml(item.section_name)}`:''}</small></span>${statusPill(item.status)}<time datetime="${escapeHtml(item.submitted_at)}">${formatDate(item.submitted_at)}</time></button>`}
+function resetReviewControls(){state.reviewSearch='';state.reviewSection='all';state.reviewSort='oldest';state.reviewPage=1;teacherReviews()}
+function reviewListItem(item){return `<button type="button" class="review-result ${item.status}" onclick="openReview(${Number(item.id)})"><span class="avatar">${initials(item.student_name)}</span><span class="review-result-copy"><b>${escapeHtml(item.student_name)}</b><small>${escapeHtml(item.title)}</small></span><span class="review-result-context"><small>${escapeHtml(item.section_name||'Section')}</small><time datetime="${escapeHtml(item.submitted_at)}">${formatDate(item.submitted_at)}</time></span>${statusPill(item.status)}<span class="review-open">Open review <b aria-hidden="true">›</b></span></button>`}
 function restoreSearchFocus(selector,start,end){const input=document.querySelector(selector);if(!input)return;input.focus({preventScroll:true});input.setSelectionRange(start,end)}
 function searchReviews(input,event){state.reviewSearch=input.value;state.reviewPage=1;if(event?.isComposing)return;const start=input.selectionStart,end=input.selectionEnd;teacherReviews();restoreSearchFocus('#review-search',start,end)}
 function openReview(id){

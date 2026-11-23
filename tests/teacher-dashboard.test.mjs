@@ -41,10 +41,24 @@ test('review filters keep pending, verified, and returned records separate', () 
   ];
   context.rows = rows;
   const ids = expression => Array.from(vm.runInContext(expression, context), item => item.id);
-  assert.deepEqual(ids("teacherReviewItems(rows,'pending','','oldest')"), [1]);
-  assert.deepEqual(ids("teacherReviewItems(rows,'verified','','oldest')"), [2]);
-  assert.deepEqual(ids("teacherReviewItems(rows,'returned','Alex','oldest')"), [3]);
-  assert.deepEqual(ids("teacherReviewItems(rows,'all','','newest')"), [3,2,1]);
+  assert.deepEqual(ids("teacherReviewItems(rows,'pending','','oldest','all')"), [1]);
+  assert.deepEqual(ids("teacherReviewItems(rows,'verified','','oldest','all')"), [2]);
+  assert.deepEqual(ids("teacherReviewItems(rows,'returned','Alex','oldest','all')"), [3]);
+  assert.deepEqual(ids("teacherReviewItems(rows,'all','','newest','all')"), [3,2,1]);
+});
+
+test('review section filter works with status, search, and sorting', () => {
+  const context = vm.createContext({});
+  vm.runInContext(extract('function teacherReviewItems(', 'function teacherReviews(){'), context);
+  const rows = [
+    {id:1,section_id:10,status:'submitted',student_name:'Alex',title:'Quest A',submitted_at:'2026-01-01'},
+    {id:2,section_id:20,status:'submitted',student_name:'Bea',title:'Quest B',submitted_at:'2026-01-02'},
+    {id:3,section_id:10,status:'verified',student_name:'Alex',title:'Quest C',submitted_at:'2026-01-03'}
+  ];
+  context.rows=rows;
+  const ids = expression => Array.from(vm.runInContext(expression, context), item => item.id);
+  assert.deepEqual(ids("teacherReviewItems(rows,'all','','oldest','10')"), [1,3]);
+  assert.deepEqual(ids("teacherReviewItems(rows,'pending','Alex','newest','10')"), [1]);
 });
 
 test('reading a notification changes unread count without changing the review queue', () => {
