@@ -66,6 +66,13 @@ test('Review Desk summary uses matching status filters', () => {
   assert.match(app, /onclick="setReviewStatus\('\$\{key\}'\)"/);
 });
 
+test('Classes page requires one selected section', () => {
+  const source=extract('function teacherSections(){','function searchStudents(');
+  assert.match(source, /if\(state\.sections\.length&&!selected\)/);
+  assert.match(source, /changeSection\(state\.sections\[0\]\.id\)/);
+  assert.match(source, /sectionSelector\(false\)/);
+});
+
 test('reading a notification changes unread count without changing the review queue', () => {
   const context = vm.createContext({state:{teacher:{
     queue:[{id:9}],notifications:[{id:9},{id:10}],notificationReadIds:[10]
