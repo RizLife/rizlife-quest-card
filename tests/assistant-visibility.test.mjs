@@ -4,7 +4,8 @@ import test from 'node:test';
 
 const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 
-test('Ask Rizal is rendered for teachers but not students', () => {
-  assert.match(app, /\$\{student\?'':assistantWidget\(false\)\}/);
-  assert.doesNotMatch(app, /\$\{assistantWidget\(student\)\}/);
+test('Ask Rizal is rendered with role-specific guidance for teachers and students', () => {
+  assert.match(app, /\$\{assistantWidget\(student\)\}/);
+  assert.match(app, /api\('\/assistant'/);
+  assert.match(app, /student\?\['Which tasks am I missing\?'/);
 });
