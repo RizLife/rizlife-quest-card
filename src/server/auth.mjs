@@ -10,7 +10,7 @@ export function createAuthorizer({ admin, createAuthClient }) {
 
     const { data: profile, error: profileError } = await admin
       .from('profiles')
-      .select('id,name,role,active')
+      .select('id,name,role,active,student_number,avatar_path')
       .eq('id', user.id)
       .single();
     if (profileError || !profile?.active) throw new HttpError(403, 'This account is not active.');

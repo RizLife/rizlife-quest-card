@@ -37,16 +37,28 @@ PORT=8765
 
 Never expose or commit `SUPABASE_SECRET_KEY`. It bypasses Row Level Security and is used only by the Node server.
 
-### Configure student invitation email
+### Configure student invitations
 
-Teachers enroll new students by sending an email invitation. For production delivery:
+RizLife generates a one-time Supabase invitation and opens a prepared Outlook Web message for the teacher to send from their APC account. No custom SMTP provider is required.
 
-1. In Supabase, open **Authentication > SMTP Settings** and configure a production SMTP provider.
-2. Open **Authentication > Email Templates > Invite user** and replace the template with `supabase/invite-email-template.html`.
-3. Under **Authentication > URL Configuration**, set the Site URL to the production application URL and allow `https://your-production-domain.example/accept-invite` as a Redirect URL.
-4. Set `APP_URL` to the same production origin in Vercel. Do not include a trailing slash.
+1. Under **Authentication > URL Configuration**, set the Site URL to the production application URL and allow `https://your-production-domain.example/accept-invite` as a Redirect URL.
+2. Set `APP_URL` to the same production origin in Vercel. Do not include a trailing slash.
 
-The invitation template intentionally sends students to a confirmation page before the real verification URL is opened. This prevents automated email link scanners from consuming the one-time invitation link.
+The prepared message uses a confirmation page before the real verification URL is opened. This reduces the chance that automated email link scanners consume the one-time invitation link.
+
+Each invitation records the teacher-selected section in both the student enrollment and email metadata. Visiting `/accept-invite` without the signed invitation parameters does not activate an account or enroll a student; it displays an invalid-invitation message. Only the latest valid one-time Supabase invitation can establish the invitation session.
+
+### Bulk student import
+
+Teachers can preview and import CSV or Excel rosters from the Students page. Required columns are `Student Name` and `Student Email`; `Student ID` and `Section` are optional. Before enabling this feature on an existing database, run `supabase/student-number-migration.sql` once in the Supabase SQL Editor. Imports are limited to 500 rows and 2.5 MB, are validated again on the server, and only target sections owned by the signed-in teacher.
+
+Teachers can also use **Add student** for manual, one-at-a-time enrollment. The manual form accepts the same name, email, and optional Student ID fields. Existing accounts are linked to the selected section; new accounts receive a prepared Outlook invitation.
+
+### Join codes and student self-registration
+
+For an existing database, run `supabase/join-codes-migration.sql`, `supabase/join-code-recovery-migration.sql`, and `supabase/pending-registration-migration.sql` once in the SQL Editor. Each section has at most one active join code. The code remains valid until its teacher replaces or revokes it, and it stays visible and copyable after refresh. Codes created before the recovery migration were stored as hashes only; they still work but must be replaced once before they can be displayed again.
+
+Students without accounts may register using their full name, official `@student.apc.edu.ph` address, Student ID, password, and a valid join code. Because email delivery is not configured, this does not prove ownership of the Outlook mailbox. The account remains inactive until the teacher compares the submitted details with the official roster and approves it. Rejected, unapproved accounts are removed so corrected details can be submitted again.
 
 ## 3. Install dependencies
 

@@ -9,8 +9,8 @@
               <td style="padding:34px">
                 <div style="width:48px;height:48px;line-height:48px;text-align:center;border-radius:10px;background:#304d70;color:#ffffff;font:700 25px Georgia,serif">R</div>
                 <p style="margin:24px 0 8px;color:#466487;font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase">Rizal Life invitation</p>
-                <h1 style="margin:0 0 14px;font-size:27px;line-height:1.25">You have been invited to join a class</h1>
-                <p style="margin:0 0 24px;color:#5f6974;font-size:15px;line-height:1.6">Hello {{ .Data.name }}, your teacher has invited your school email to the Rizal Life learning workspace.</p>
+                <h1 style="margin:0 0 14px;font-size:27px;line-height:1.25">You have been invited to join {{ .Data.section_names }}</h1>
+                <p style="margin:0 0 24px;color:#5f6974;font-size:15px;line-height:1.6">Hello {{ .Data.name }}, your teacher has invited your school Outlook account to join <strong>{{ .Data.section_names }}</strong> in RizLife.</p>
                 <a href="{{ .RedirectTo }}?confirmation_url={{ .ConfirmationURL }}" style="display:inline-block;background:#365878;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:13px 20px;border-radius:7px">Open invitation</a>
                 <p style="margin:24px 0 0;color:#7d858e;font-size:12px;line-height:1.5">After opening the invitation, select Accept invitation in Rizal Life to verify your email and create your password. If you were not expecting this message, you can ignore it.</p>
               </td>
