@@ -7,5 +7,6 @@ const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8')
 test('Ask Rizal is rendered with role-specific guidance for teachers and students', () => {
   assert.match(app, /\$\{assistantWidget\(student\)\}/);
   assert.match(app, /api\('\/assistant'/);
-  assert.match(app, /student\?\['Which tasks am I missing\?'/);
+  assert.doesNotMatch(app, /assistant-suggestions/);
+  assert.match(app, /title="Send message">\$\{icons\.send\}/);
 });
