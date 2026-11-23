@@ -15,8 +15,8 @@ test('role-aware assistant uses a server-only OpenRouter integration', () => {
 });
 
 test('assistant sends bounded history and authorized academic context', () => {
-  assert.match(server, /body\.history\.slice\(-6\)/);
-  assert.match(server, /Carefully count records instead of estimating/);
-  assert.match(server, /max_tokens: 350/);
+  assert.match(server, /body\.history\.slice\(-4\)/);
+  assert.match(server, /Count exactly/);
+  assert.match(server, /max_tokens: 180/);
   assert.match(client, /api\('\/assistant'/);
 });
