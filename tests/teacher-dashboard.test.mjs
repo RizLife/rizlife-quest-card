@@ -61,6 +61,11 @@ test('review section filter works with status, search, and sorting', () => {
   assert.deepEqual(ids("teacherReviewItems(rows,'pending','Alex','newest','10')"), [1]);
 });
 
+test('Review Desk summary uses matching status filters', () => {
+  assert.match(app, /\['all','Total submissions'\],\['pending','Pending reviews'\],\['returned','Returned'\],\['verified','Completed'\]/);
+  assert.match(app, /onclick="setReviewStatus\('\$\{key\}'\)"/);
+});
+
 test('reading a notification changes unread count without changing the review queue', () => {
   const context = vm.createContext({state:{teacher:{
     queue:[{id:9}],notifications:[{id:9},{id:10}],notificationReadIds:[10]
