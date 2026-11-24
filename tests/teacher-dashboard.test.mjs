@@ -73,6 +73,13 @@ test('Classes page requires one selected section', () => {
   assert.match(source, /sectionSelector\(false\)/);
 });
 
+test('Overview page requires one selected section', () => {
+  const source=extract('function teacherOverview(){','function teacherTasks(');
+  assert.match(source, /state\.sectionId==='all'/);
+  assert.match(source, /changeSection\(state\.sections\[0\]\.id\)/);
+  assert.match(source, /sectionSelector\(false\)/);
+});
+
 test('reading a notification changes unread count without changing the review queue', () => {
   const context = vm.createContext({state:{teacher:{
     queue:[{id:9}],notifications:[{id:9},{id:10}],notificationReadIds:[10]
