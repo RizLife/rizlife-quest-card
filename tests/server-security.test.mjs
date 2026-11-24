@@ -23,6 +23,11 @@ test('server applies browser security headers and same-origin mutation checks', 
   assert.match(vercel, /Strict-Transport-Security/);
 });
 
+test('APC branding uses a bundled asset instead of an external hotlink', () => {
+  assert.match(client, /assets\/apc-seal\.webp/);
+  assert.doesNotMatch(client, /apc\.edu\.ph\/wp-content\/uploads\/2023\/03\/cropped-APC_Seal/);
+});
+
 test('same-origin guard permits the app and rejects cross-site writes', () => {
   class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
   const context = vm.createContext({ HttpError, URL, process:{env:{NODE_ENV:'production'}} });
