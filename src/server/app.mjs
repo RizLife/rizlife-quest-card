@@ -252,12 +252,20 @@ async function studentCard(studentId, allowedSectionIds=null) {
   }
   if (!sectionIds.length) return [];
   const [{ data:quests, error:questError }, submissions] = await Promise.all([
-    admin.from('quests').select('id,title,description,requirement,section_id').in('section_id',sectionIds).eq('active', true).order('id'),
+    admin.from('quests').select('id,title,description,requirement,section_id,quest_slot').in('section_id',sectionIds).eq('active', true).order('section_id').order('quest_slot'),
     latestSubmissions(studentId)
   ]);
   if (questError) throw questError;
   const byQuest = new Map(submissions.map(row => [Number(row.quest_id), row]));
   return quests.map(quest => ({ ...quest, submission:byQuest.get(Number(quest.id)) || null }));
+}
+
+function assertQuestSlot(value) {
+  const slot = Number(value);
+  if (!Number.isInteger(slot) || slot < 1 || slot > 24) {
+    throw new HttpError(400, 'Choose a Quest Card slot from 1 to 24.');
+  }
+  return slot;
 }
 
 async function requireOwnedSection(teacherId, sectionId) {
@@ -408,7 +416,7 @@ async function dashboardData(teacherId, sectionId) {
   if (enrollmentError) throw enrollmentError;
   const studentIds = [...new Set(enrollments.map(row=>row.student_id))];
   const profileQuery = studentIds.length ? admin.from('profiles').select('id,name,active').in('id',studentIds).eq('active',true).order('name') : Promise.resolve({data:[],error:null});
-  const questQuery = admin.from('quests').select('id,title,section_id').eq('active',true).order('id');
+  const questQuery = admin.from('quests').select('id,title,section_id,quest_slot').eq('active',true).order('quest_slot');
   const [{ data:profiles, error:profileError }, questResult, authResult, teacherAuthResult] = await Promise.all([
     profileQuery,
     sectionIds.length === 1 ? questQuery.eq('section_id',sectionIds[0]) : questQuery.in('section_id',sectionIds),
@@ -1075,9 +1083,21 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && path === '/api/teacher/quests') {
     const teacher = await requireUser(req, 'teacher');
     const section = await requireOwnedSection(teacher.id,url.searchParams.get('sectionId'));
-    const { data, error } = await admin.from('quests').select('*').eq('section_id',section.id).order('active',{ascending:false}).order('id');
+    const { data, error } = await admin.from('quests').select('*').eq('section_id',section.id).order('quest_slot');
     if (error) throw error;
-    return send(res, 200, { quests:data });
+    const questIds=data.map(quest=>quest.id);
+    const {data:enrollments,error:studentError}=await admin.from('section_students').select('student_id').eq('section_id',section.id);
+    if(studentError)throw studentError;
+    const studentIds=enrollments.map(row=>row.student_id);
+    const submissionResult=questIds.length&&studentIds.length
+      ? await admin.from('submissions').select('id,quest_id,student_id,status').in('quest_id',questIds).in('student_id',studentIds).order('id',{ascending:false})
+      : {data:[],error:null};
+    if(submissionResult.error)throw submissionResult.error;
+    const latest=new Map();
+    for(const row of submissionResult.data){const key=`${row.student_id}:${row.quest_id}`;if(!latest.has(key))latest.set(key,row)}
+    const completedByQuest=new Map();
+    for(const row of latest.values())if(row.status==='verified')completedByQuest.set(Number(row.quest_id),(completedByQuest.get(Number(row.quest_id))||0)+1);
+    return send(res, 200, { quests:data.map(quest=>({...quest,completed_count:completedByQuest.get(Number(quest.id))||0,student_count:studentIds.length})) });
   }
 
   if (req.method === 'POST' && path === '/api/teacher/quests') {
@@ -1085,6 +1105,7 @@ async function handleApi(req, res, url) {
     const body = await parseBody(req);
     const section = await requireOwnedSection(teacher.id,body.sectionId);
     const record = {
+      quest_slot:assertQuestSlot(body.questSlot),
       title:assertText(body.title,'Task title',120),
       description:assertText(body.description,'Instructions',2000),
       requirement:assertText(body.requirement,'Evidence requirement',500),
@@ -1092,6 +1113,7 @@ async function handleApi(req, res, url) {
       section_id:section.id
     };
     const { data, error } = await admin.from('quests').insert(record).select('*').single();
+    if (error?.code==='23505') throw new HttpError(409,'That Quest Card slot is already assigned in this class.');
     if (error) throw error;
     return send(res, 201, { id:data.id, quest:data });
   }
@@ -1102,10 +1124,12 @@ async function handleApi(req, res, url) {
     const body = await parseBody(req);
     const section = await requireOwnedSection(teacher.id,body.sectionId);
     const { data, error } = await admin.from('quests').update({
+      quest_slot:assertQuestSlot(body.questSlot),
       title:assertText(body.title,'Task title',120),
       description:assertText(body.description,'Instructions',2000),
       requirement:assertText(body.requirement,'Evidence requirement',500)
     }).eq('id',Number(questMatch[1])).eq('section_id',section.id).select('*').maybeSingle();
+    if (error?.code==='23505') throw new HttpError(409,'That Quest Card slot is already assigned in this class.');
     if (error) throw error;
     if (!data) throw new HttpError(404, 'Task not found.');
     return send(res, 200, { ok:true, quest:data });

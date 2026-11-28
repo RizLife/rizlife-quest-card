@@ -21,6 +21,8 @@ For an existing project, also run `supabase/security-hardening.sql` after the cl
 
 Run `supabase/storage-migration.sql` once to create the private image-evidence bucket. The server issues short-lived signed URLs; the bucket is never public.
 
+For an existing project, run `supabase/quest-card-migration.sql` once before deploying the Quest Card feature. It assigns every existing quest a stable slot from 1–24 within its class and prevents duplicate slots.
+
 ## 2. Configure local environment variables
 
 Create a local `.env` file. In the Supabase dashboard, open **Project Settings > Data API** and copy the project URL and publishable key. Then open **Project Settings > API Keys** and create or copy a server secret key.
